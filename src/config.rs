@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
-use anyhow::{Context, Result};
 use alloy_primitives::Address;
+use anyhow::{Context, Result};
 use serde::Deserialize;
 use tracing::warn;
 
@@ -12,6 +12,10 @@ pub struct Config {
     pub actions: HashMap<String, ActionConfig>,
     #[serde(default)]
     pub l2: bool,
+    #[serde(default)]
+    pub event_sigs_path: Option<String>,
+    #[serde(default)]
+    pub func_sigs_path: Option<String>,
     #[serde(rename = "max-requests-per-second")]
     #[serde(default)]
     pub max_requests_per_second: u32,
@@ -50,4 +54,3 @@ pub fn collect_enabled_addresses(cfg: &Config) -> Result<Vec<Address>> {
     }
     Ok(set.into_iter().collect())
 }
-

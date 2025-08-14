@@ -1,16 +1,15 @@
-use anyhow::{anyhow, Context, Result};
 use alloy_provider::{ProviderBuilder, RootProvider};
-use alloy_transport_ws::{WsClient, WsConnect};
+use alloy_transport::BoxTransport;
+use anyhow::{Context, Result, anyhow};
 
-pub async fn connect_ws(url: &str) -> Result<RootProvider<WsClient>> {
+// Connect using the built-in connection string API and return a boxed transport
+pub async fn connect_ws(url: &str) -> Result<RootProvider<BoxTransport>> {
     if !url.starts_with("ws") {
         return Err(anyhow!("rpcurl must be a websocket (ws/wss), got {url}"));
     }
-    let ws = WsConnect::new(url);
     let provider = ProviderBuilder::new()
-        .on_ws(ws)
+        .on_builtin(url)
         .await
         .context("connecting websocket")?;
     Ok(provider)
 }
-

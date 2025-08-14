@@ -53,9 +53,15 @@ pub struct BlockRecord {
 }
 
 pub trait Action: Send + Sync {
-    fn on_event(&self, _e: &EventRecord) -> Result<()> { Ok(()) }
-    fn on_tx(&self, _t: &TxRecord) -> Result<()> { Ok(()) }
-    fn on_block(&self, _b: &BlockRecord) -> Result<()> { Ok(()) }
+    fn on_event(&self, _e: &EventRecord) -> Result<()> {
+        Ok(())
+    }
+    fn on_tx(&self, _t: &TxRecord) -> Result<()> {
+        Ok(())
+    }
+    fn on_block(&self, _b: &BlockRecord) -> Result<()> {
+        Ok(())
+    }
 }
 
 pub struct ActionSet {
@@ -63,16 +69,34 @@ pub struct ActionSet {
 }
 
 impl ActionSet {
-    pub fn new() -> Self { Self { list: vec![] } }
-    pub fn add<A: Action + 'static>(&mut self, a: A) { self.list.push(Box::new(a)); }
-    pub fn on_event(&self, e: &EventRecord) { for a in &self.list { let _ = a.on_event(e); } }
-    pub fn on_tx(&self, t: &TxRecord) { for a in &self.list { let _ = a.on_tx(t); } }
-    pub fn on_block(&self, b: &BlockRecord) { for a in &self.list { let _ = a.on_block(b); } }
+    pub fn new() -> Self {
+        Self { list: vec![] }
+    }
+    pub fn add<A: Action + 'static>(&mut self, a: A) {
+        self.list.push(Box::new(a));
+    }
+    pub fn on_event(&self, e: &EventRecord) {
+        for a in &self.list {
+            let _ = a.on_event(e);
+        }
+    }
+    pub fn on_tx(&self, t: &TxRecord) {
+        for a in &self.list {
+            let _ = a.on_tx(t);
+        }
+    }
+    pub fn on_block(&self, b: &BlockRecord) {
+        for a in &self.list {
+            let _ = a.on_block(b);
+        }
+    }
 }
 
-pub mod logging;
+pub mod deployment;
 pub mod jsonlog;
-pub mod transfer;
+pub mod logging;
 pub mod ownership;
 pub mod proxy;
 pub mod tornado;
+pub mod transfer;
+pub mod large_transfer;

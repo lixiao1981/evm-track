@@ -3,6 +3,7 @@ use std::{collections::HashMap, fs, path::Path};
 use alloy_json_abi::{Event, Function};
 use alloy_primitives::{Address, B256, U256};
 use anyhow::{Context, Result};
+use once_cell::sync::OnceCell;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -20,7 +21,34 @@ pub struct FuncSigEntry {
 }
 
 pub type EventSigMap = HashMap<String, EventSigEntry>; // topic0 hex -> entry
-pub type FuncSigMap = HashMap<String, FuncSigEntry>;   // selector hex -> entry
+pub type FuncSigMap = HashMap<String, FuncSigEntry>; // selector hex -> entry
+
+static EVENT_SIGS_PATH: OnceCell<String> = OnceCell::new();
+static FUNC_SIGS_PATH: OnceCell<String> = OnceCell::new();
+
+pub fn set_event_sigs_path(path: String) {
+    let _ = EVENT_SIGS_PATH.set(path);
+}
+
+pub fn set_func_sigs_path(path: String) {
+    let _ = FUNC_SIGS_PATH.set(path);
+}
+
+pub fn load_event_sigs_default() -> Result<EventSigMap> {
+    let p = EVENT_SIGS_PATH
+        .get()
+        .cloned()
+        .unwrap_or_else(|| "./data/event_sigs.json".to_string());
+    load_event_sigs(p)
+}
+
+pub fn load_func_sigs_default() -> Result<FuncSigMap> {
+    let p = FUNC_SIGS_PATH
+        .get()
+        .cloned()
+        .unwrap_or_else(|| "./data/func_sigs.json".to_string());
+    load_func_sigs(p)
+}
 
 pub fn load_event_sigs<P: AsRef<Path>>(path: P) -> Result<EventSigMap> {
     let s = fs::read_to_string(path).context("reading event_sigs.json")?;
@@ -78,8 +106,16 @@ pub fn decode_static_word(word: &[u8], typ: &str) -> DecodedValue {
             DecodedValue::Address(Address::from(a))
         }
         "bool" => DecodedValue::Bool(word[31] != 0),
-        t if t.starts_with("uint") => DecodedValue::Uint(U256::from_be_bytes(word.try_into().unwrap())),
-        t if t.starts_with("int") => DecodedValue::Int(U256::from_be_bytes(word.try_into().unwrap())),
+        t if t.starts_with("uint") => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(word);
+            DecodedValue::Uint(U256::from_be_bytes(arr))
+        }
+        t if t.starts_with("int") => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(word);
+            DecodedValue::Int(U256::from_be_bytes(arr))
+        }
         "bytes32" => DecodedValue::Bytes32(word.try_into().unwrap()),
         _ => DecodedValue::Unsupported("dynamic or unsupported type"),
     }
@@ -90,13 +126,19 @@ fn is_dynamic_type(typ: &str) -> bool {
 }
 
 fn decode_dynamic<'a>(data: &'a [u8], offset: usize, elem_type: &str) -> Option<DecodedValue> {
-    if offset + 32 > data.len() { return None; }
+    if offset + 32 > data.len() {
+        return None;
+    }
     if elem_type == "string" || elem_type == "bytes" {
         // offset -> length -> bytes
-        let len = U256::from_be_bytes(data[offset..offset + 32].try_into().ok()?).to::<usize>();
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(&data[offset..offset + 32]);
+        let len = U256::from_be_bytes(arr).to::<usize>();
         let start = offset + 32;
-        let end = start + ((len + 31) / 32) * 32; // padded end
-        if start + len > data.len() { return None; }
+        let _end = start + ((len + 31) / 32) * 32; // padded end (unused)
+        if start + len > data.len() {
+            return None;
+        }
         let raw = &data[start..start + len];
         return Some(if elem_type == "string" {
             DecodedValue::String(String::from_utf8_lossy(raw).into_owned())
@@ -106,13 +148,17 @@ fn decode_dynamic<'a>(data: &'a [u8], offset: usize, elem_type: &str) -> Option<
     }
     // dynamic array: T[]
     if let Some(base) = elem_type.strip_suffix("[]") {
-        let count = U256::from_be_bytes(data[offset..offset + 32].try_into().ok()?).to::<usize>();
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(&data[offset..offset + 32]);
+        let count = U256::from_be_bytes(arr).to::<usize>();
         let start = offset + 32;
         // static element size = 32 bytes for primitive statics
         let mut out = Vec::with_capacity(count);
         for i in 0..count {
             let off = start + i * 32;
-            if off + 32 > data.len() { return None; }
+            if off + 32 > data.len() {
+                return None;
+            }
             if is_dynamic_type(base) {
                 // nested dynamic not supported in this simple decoder
                 return Some(DecodedValue::Unsupported("nested dynamic array"));
@@ -136,40 +182,55 @@ pub fn try_decode_event(
     // indexed decoding from topics[1..]
     let mut ti = 1usize;
     // head area is 32 bytes per non-indexed input
-    let non_indexed: Vec<_> = entry
-        .abi
-        .inputs
-        .iter()
-        .filter(|i| !i.indexed.unwrap_or(false))
-        .collect();
+    let _non_indexed: Vec<_> = entry.abi.inputs.iter().filter(|i| !i.indexed).collect();
     // decode
     let mut head_index = 0usize;
     for input in &entry.abi.inputs {
-        let name = input.name.clone().unwrap_or_default();
-        if input.indexed.unwrap_or(false) {
+        let name = input.name.clone();
+        if input.indexed {
             if ti < topics.len() {
-                let v = decode_indexed(&topics[ti], input.kind.canonical_type());
+                let v = decode_indexed(&topics[ti], &input.ty);
                 ti += 1;
-                fields.push(DecodedField { name, value: v, indexed: true });
+                fields.push(DecodedField {
+                    name,
+                    value: v,
+                    indexed: true,
+                });
             }
         } else {
-            let typ = input.kind.canonical_type();
+            let typ = input.ty.as_str();
             // head word
             let head_off = head_index * 32;
             head_index += 1;
-            if head_off + 32 > data.len() { continue; }
+            if head_off + 32 > data.len() {
+                continue;
+            }
             if is_dynamic_type(typ) {
                 // read offset relative to start of data
-                let off = U256::from_be_bytes(data[head_off..head_off + 32].try_into().ok()?).to::<usize>();
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(&data[head_off..head_off + 32]);
+                let off = U256::from_be_bytes(arr).to::<usize>();
                 if let Some(v) = decode_dynamic(data, off, typ) {
-                    fields.push(DecodedField { name, value: v, indexed: false });
+                    fields.push(DecodedField {
+                        name,
+                        value: v,
+                        indexed: false,
+                    });
                 } else {
-                    fields.push(DecodedField { name, value: DecodedValue::Unsupported("dynamic decode failed"), indexed: false });
+                    fields.push(DecodedField {
+                        name,
+                        value: DecodedValue::Unsupported("dynamic decode failed"),
+                        indexed: false,
+                    });
                 }
             } else {
                 let word = &data[head_off..head_off + 32];
                 let v = decode_static_word(word, typ);
-                fields.push(DecodedField { name, value: v, indexed: false });
+                fields.push(DecodedField {
+                    name,
+                    value: v,
+                    indexed: false,
+                });
             }
         }
     }
@@ -186,11 +247,15 @@ pub fn try_decode_function(
     let count = entry.abi.inputs.len();
     let mut values = Vec::with_capacity(count);
     for (i, input) in entry.abi.inputs.iter().enumerate() {
-        let typ = input.kind.canonical_type();
+        let typ = input.ty.as_str();
         let off = head_base + i * 32;
-        if off + 32 > calldata.len() { break; }
+        if off + 32 > calldata.len() {
+            break;
+        }
         if is_dynamic_type(typ) {
-            let rel = U256::from_be_bytes(calldata[off..off + 32].try_into().ok()?).to::<usize>();
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&calldata[off..off + 32]);
+            let rel = U256::from_be_bytes(arr).to::<usize>();
             let data_off = head_base + rel;
             if let Some(v) = decode_dynamic(&calldata, data_off, typ) {
                 values.push(v);
