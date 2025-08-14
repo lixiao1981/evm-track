@@ -1,0 +1,72 @@
+{
+  "rpcurl": "ws://192.168.80.1:8546",
+  "event_sigs_path": "./data/event_sigs.json",
+  "func_sigs_path": "./data/func_sigs.json",
+  "max-requests-per-second": 20,
+  "actions": {
+    "Logging": {
+      "enabled": true,
+      "addresses": {
+        "0x55d398326f99059fF775485246999027B3197955": { "name": "USDT (BSC)" },
+        "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c": { "name": "WBNB" }
+      },
+      "options": {
+        "log-events": true,
+        "log-transactions": true,
+        "log-blocks": true,
+        "enable-terminal-logs": true,
+        "enable-discord-logs": false,
+        "discord-webhook-url": ""
+      }
+    },
+
+    "Transfer": {
+      "enabled": true,
+      "addresses": {
+        "0x55d398326f99059fF775485246999027B3197955": {},
+        "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c": {}
+      },
+      "options": {}
+    },
+
+    "LargeTransfer": {
+      "enabled": true,
+      "addresses": {
+        "0x55d398326f99059fF775485246999027B3197955": { "name": "USDT (BSC)" }
+      },
+      "options": {
+        "min-amount": "100000",
+        "decimals-default": 18
+      }
+    },
+
+    "Ownership": {
+      "enabled": false,
+      "addresses": {},
+      "options": {}
+    },
+
+    "Proxy": {
+      "enabled": false,
+      "addresses": {},
+      "options": {}
+    },
+
+    "Deployment": {
+      "enabled": false,
+      "addresses": {},
+      "options": {
+        "output-filepath": ""
+      }
+    },
+
+    "TornadoCash": {
+      "enabled": false,
+      "addresses": {},
+      "options": {
+        "output-filepath": "./tornado_out.txt"
+      }
+    }
+  }
+}
+

@@ -177,11 +177,13 @@ pub async fn run_pending_transactions(
     provider: RootProvider<BoxTransport>,
     addrs: Vec<Address>,
     actions: Option<Arc<ActionSet>>,
+    hashes_only: bool,
 ) -> Result<()> {
     let funcs = abi::load_func_sigs("./data/func_sigs.json").unwrap_or_default();
-    // Try full pending tx subscription first
-    throttle::acquire().await;
-    if let Ok(sub) = provider.subscribe_full_pending_transactions().await {
+    // Try full pending tx subscription first unless hashes_only
+    if !hashes_only {
+        throttle::acquire().await;
+        if let Ok(sub) = provider.subscribe_full_pending_transactions().await {
         let mut stream = sub.into_stream();
         while let Some(tx) = stream.next().await {
             let to_addr = match tx.kind() {
@@ -234,6 +236,7 @@ pub async fn run_pending_transactions(
             }
         }
         return Ok(());
+        }
     }
     // Fallback to hashes
     throttle::acquire().await;

@@ -38,7 +38,7 @@ pub enum Commands {
 #[derive(Debug, Args)]
 pub struct CommonFlags {
     #[arg(long)]
-    pub config: PathBuf,
+    pub config: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -57,16 +57,25 @@ pub enum TrackWhichCmd {
 
 #[derive(Debug, Args)]
 pub struct RealtimeCmd {
+    /// 可在此处提供配置路径，优先级高于 `track --config`
+    #[arg(long)]
+    pub config: Option<PathBuf>,
     #[arg(long, default_value_t = false)]
     pub events: bool,
     #[arg(long, default_value_t = false)]
     pub blocks: bool,
     #[arg(long, default_value_t = false)]
     pub pending_blocks: bool,
+    /// 仅订阅待打包交易的哈希，避免某些节点 full-pending 缺字段导致的反序列化错误
+    #[arg(long, default_value_t = false)]
+    pub pending_hashes_only: bool,
 }
 
-#[derive(Debug, Args, Clone, Copy)]
+#[derive(Debug, Args, Clone)]
 pub struct RangeFlags {
+    /// 可在此处提供配置路径，优先级高于 `historical --config` 与 `track --config`
+    #[arg(long)]
+    pub config: Option<PathBuf>,
     #[arg(long)]
     pub from_block: u64,
     #[arg(long)]
@@ -76,6 +85,9 @@ pub struct RangeFlags {
 }
 #[derive(Debug, Args)]
 pub struct HistoricalCmd {
+    /// 可在此处提供配置路径，优先级高于 `track --config`
+    #[arg(long)]
+    pub config: Option<PathBuf>,
     #[command(subcommand)]
     pub which: HistoricalWhichCmd,
 }
