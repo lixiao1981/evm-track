@@ -107,10 +107,15 @@ async fn main() -> Result<()> {
                 set.add(actions::transfer::TransferAction::new(prov_arc.clone()));
                 set.add(actions::ownership::OwnershipAction);
                 set.add(actions::proxy::ProxyUpgradeAction::new(prov_arc.clone()));
-                set.add(actions::deployment::DeploymentScanAction::new(
-                    prov_arc.clone(),
-                    actions::deployment::DeploymentOptions::default(),
-                ));
+                // Deployment: allow optional file output via actions.Deployment.options.output-filepath
+                let dep_out_1 = cfg
+                    .actions
+                    .get("Deployment")
+                    .and_then(|ac| ac.options.get("output-filepath"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let dep_opts_1 = actions::deployment::DeploymentOptions { output_filepath: dep_out_1 };
+                set.add(actions::deployment::DeploymentScanAction::new(prov_arc.clone(), dep_opts_1));
                 // LargeTransfer options from config
                 let lt_cfg = cfg.actions.get("LargeTransfer");
                 if let Some(ac) = lt_cfg {
@@ -174,10 +179,15 @@ async fn main() -> Result<()> {
                     set2.add(actions::transfer::TransferAction::new(prov_arc.clone()));
                     set2.add(actions::ownership::OwnershipAction);
                     set2.add(actions::proxy::ProxyUpgradeAction::new(prov_arc.clone()));
-                    set2.add(actions::deployment::DeploymentScanAction::new(
-                        prov_arc.clone(),
-                        actions::deployment::DeploymentOptions::default(),
-                    ));
+                    // Deployment: optional file output
+                    let dep_out_2 = cfg
+                        .actions
+                        .get("Deployment")
+                        .and_then(|ac| ac.options.get("output-filepath"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    let dep_opts_2 = actions::deployment::DeploymentOptions { output_filepath: dep_out_2 };
+                    set2.add(actions::deployment::DeploymentScanAction::new(prov_arc.clone(), dep_opts_2));
                     // Initscan action (optional)
                     if let Some(ac) = cfg.actions.get("Initscan") {
                         if ac.enabled {
@@ -307,7 +317,15 @@ async fn main() -> Result<()> {
                         set.add(actions::transfer::TransferAction::new(prov_arc.clone()));
                         set.add(actions::ownership::OwnershipAction);
                         set.add(actions::proxy::ProxyUpgradeAction::new(prov_arc.clone()));
-                        set.add(actions::deployment::DeploymentScanAction::new(prov_arc.clone(), actions::deployment::DeploymentOptions::default()));
+                        // Deployment: optional file output
+                        let dep_out_3 = cfg
+                            .actions
+                            .get("Deployment")
+                            .and_then(|ac| ac.options.get("output-filepath"))
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        let dep_opts_3 = actions::deployment::DeploymentOptions { output_filepath: dep_out_3 };
+                        set.add(actions::deployment::DeploymentScanAction::new(prov_arc.clone(), dep_opts_3));
                         if let Some(ac) = cfg.actions.get("LargeTransfer") {
                             let min_h = ac.options.get("min-amount").and_then(|v| v.as_str()).map(|s| s.to_string())
                                 .or_else(|| ac.options.get("min_amount").and_then(|v| v.as_str()).map(|s| s.to_string()));
@@ -348,7 +366,15 @@ async fn main() -> Result<()> {
                         set2.add(actions::transfer::TransferAction::new(prov_arc.clone()));
                         set2.add(actions::ownership::OwnershipAction);
                         set2.add(actions::proxy::ProxyUpgradeAction::new(prov_arc.clone()));
-                        set2.add(actions::deployment::DeploymentScanAction::new(prov_arc.clone(), actions::deployment::DeploymentOptions::default()));
+                        // Deployment: optional file output
+                        let dep_out_4 = cfg
+                            .actions
+                            .get("Deployment")
+                            .and_then(|ac| ac.options.get("output-filepath"))
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        let dep_opts_4 = actions::deployment::DeploymentOptions { output_filepath: dep_out_4 };
+                        set2.add(actions::deployment::DeploymentScanAction::new(prov_arc.clone(), dep_opts_4));
                         // Initscan action (optional)
                         if let Some(ac) = cfg.actions.get("Initscan") {
                             if ac.enabled {
@@ -411,5 +437,71 @@ async fn main() -> Result<()> {
                 Ok(())
             }
         },
+        Commands::InitScan(cmd) => {
+            // 配置加载（仅此子命令层）
+            let cfg_path = cmd
+                .config
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("--config is required for initscan"))?;
+            let mut cfg = config::load_config(cfg_path)?;
+            // Optional override sig paths from CLI
+            if let Some(p) = &cli.event_sigs { abi::set_event_sigs_path(p.display().to_string()); }
+            if let Some(p) = &cli.func_sigs { abi::set_func_sigs_path(p.display().to_string()); }
+            if let Some(p) = &cfg.event_sigs_path { abi::set_event_sigs_path(p.clone()); }
+            if let Some(p) = &cfg.func_sigs_path { abi::set_func_sigs_path(p.clone()); }
+            crate::throttle::init(cfg.max_requests_per_second);
+            let provider = provider::connect_ws(&cfg.rpcurl).await?;
+
+            // 构建 Initscan 选项（来自配置）
+            let ac = cfg
+                .actions
+                .get("Initscan")
+                .ok_or_else(|| anyhow::anyhow!("Config must include actions.Initscan"))?;
+            anyhow::ensure!(ac.enabled, "actions.Initscan must be enabled");
+            let o = &ac.options;
+            let from = o
+                .get("from-address")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse().ok());
+            let mut check_addrs: Vec<alloy_primitives::Address> = vec![];
+            if let Some(arr) = o.get("check-addresses").and_then(|v| v.as_array()) {
+                for a in arr {
+                    if let Some(s) = a.as_str() { if let Ok(addr) = s.parse() { check_addrs.push(addr); } }
+                }
+            }
+            let mut func_sigs: Vec<(String, Vec<u8>)> = vec![];
+            if let Some(map) = o.get("function-signature-calldata").and_then(|v| v.as_object()) {
+                for (k, v) in map {
+                    if let Some(s) = v.as_str() {
+                        let h = s.trim_start_matches("0x");
+                        if let Ok(b) = hex::decode(h) { func_sigs.push((k.clone(), b)); }
+                    }
+                }
+            }
+            let init_after = o.get("init-after-delay").and_then(|v| v.as_u64()).unwrap_or(1);
+            let usd_threshold = o.get("alert-usd-threshold").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let webhook_url = o.get("webhook-url").and_then(|v| v.as_str()).map(|s| s.to_string()).or_else(|| cli.webhook_url.clone());
+            let init_known_freq = o.get("init-known-contracts-frequency").and_then(|v| v.as_u64());
+            let known_path = o.get("initializable-contracts-filepath").and_then(|v| v.as_str()).map(|s| s.to_string());
+
+            let is_opts = actions::initscan::InitscanOptions {
+                from,
+                check_addresses: check_addrs,
+                init_after_delay_secs: init_after,
+                usd_threshold,
+                func_sigs,
+                webhook_url,
+                initializable_contracts_filepath: known_path,
+                init_known_contracts_frequency_secs: init_known_freq,
+            };
+
+            let opts = actions::history_init_scan::HistoryInitScanOptions {
+                from_block: cmd.from_block,
+                to_block: cmd.to_block,
+                initscan: is_opts,
+            };
+            let provider = std::sync::Arc::new(provider);
+            actions::history_init_scan::run(provider, opts).await
+        }
     }
 }

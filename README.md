@@ -57,6 +57,24 @@ data/
 - 输出 JSON 行：
   - 在任一命令后追加 `--json` 将以 JSON Lines 形式打印到 stdout。
 
+### InitScan（历史初始化扫描）
+
+此子命令按给定区块号范围，遍历每个区块内的交易，找到 CREATE（`to == null`）类型的部署交易，取回执中的 `contractAddress` 并调用 Initscan 逻辑尝试初始化（`eth_call` + `trace_call`/`stateDiff` + 随机 selector 复检）。
+
+- 节点要求：需支持 WebSocket 与 `trace_call`（如 Erigon、Nethermind、OpenEthereum）。
+- 示例配置：`./config.example.initscan.json`，在 `actions.Initscan` 中提供：
+  - `from-address`
+  - `check-addresses`
+  - `function-signature-calldata`
+  - 可选：`initializable-contracts-filepath` 与 `init-known-contracts-frequency` 以持久化与周期重试。
+- 运行示例：
+  - `cargo run -- init-scan --config ./config.example.initscan.json --from-block 10000000 --to-block 10001000`
+
+运行后会：
+- 遍历 [from, to] 区间，拉取包含完整交易的区块，识别 CREATE 交易；
+- 获取回执 `contractAddress`，对每个合约按配置的 calldata 尝试初始化；
+- 若命中（存在关键地址的 `stateDiff` 且通过随机 selector 复检），在终端或 webhook 输出，若配置了持久化文件也会写入。
+
 注意：
 - 配置文件需包含 `rpcurl`（WebSocket URL）与 `actions` 中至少一个 `enabled: true` 的地址。可参考 `../EVM-trackooor/example_config.json`。
 - 事件/函数签名默认从 `./data/event_sigs.json` 与 `./data/func_sigs.json` 读取：

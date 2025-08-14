@@ -13,3 +13,14 @@ pub async fn connect_ws(url: &str) -> Result<RootProvider<BoxTransport>> {
         .context("connecting websocket")?;
     Ok(provider)
 }
+
+pub async fn connect_ipc(path: &str) -> Result<RootProvider<BoxTransport>> {
+    if !path.starts_with('/') {
+        return Err(anyhow!("IPC path must be an absolute path, got {path}"));
+    }
+    let provider = ProviderBuilder::new()
+        .on_builtin(path)
+        .await
+        .context("connecting IPC")?;
+    Ok(provider)
+}

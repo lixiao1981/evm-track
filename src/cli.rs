@@ -33,6 +33,8 @@ pub struct Cli {
 pub enum Commands {
     Track(TrackCmd),
     Data(DataCmd),
+    /// Run historical init-scan over a block range
+    InitScan(InitScanCmd),
 }
 
 #[derive(Debug, Args)]
@@ -136,4 +138,17 @@ pub struct FetchAbiArgs {
     /// Output ABI JSON file path
     #[arg(long)]
     pub output: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub struct InitScanCmd {
+    /// 配置路径（包含 Initscan 的配置项）
+    #[arg(long)]
+    pub config: Option<PathBuf>,
+    /// 起始区块（包含）
+    #[arg(long)]
+    pub from_block: u64,
+    /// 结束区块（包含）
+    #[arg(long)]
+    pub to_block: u64,
 }

@@ -1,0 +1,26 @@
+{
+  "rpcurl": "ws://192.168.80.1:8546",
+  "max-requests-per-second": 0,
+  "actions": {
+    "Initscan": {
+      "enabled": true,
+      "addresses": {},
+      "options": {
+        "from-address": "0x4b20993bc481177ec7e8f571cecae8a9e22c02db",
+        "check-addresses": [
+          "0x4b20993bc481177ec7e8f571cecae8a9e22c02db"
+        ],
+        "init-after-delay": 5,
+        "alert-usd-threshold": 0,
+        "function-signature-calldata": {
+          "initialize()": "0x8129fc1c",
+          "init()": "0xe1c7392a",
+          "init(address)": "0x19ab453c000000000000000000000000d7acd2a9fd159e69bb102a1ca21c9a3e3a5f771b"
+        },
+        "webhook-url": "",
+        "initializable-contracts-filepath": "./data/eth_initializable_contracts.json",
+        "init-known-contracts-frequency": 86400
+      }
+    }
+  }
+}

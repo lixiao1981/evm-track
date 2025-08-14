@@ -139,6 +139,18 @@ impl InitscanAction {
         let contains2 = trace_success(&tr2) && state_diff_contains_any_addr(&tr2, &self.opts.check_addresses);
         Ok(contains && !contains2)
     }
+
+    // Public helper for external callers (e.g. history scanner)
+    pub async fn try_init_for_contract(&self, contract: Address, block_number: Option<u64>) {
+        if self.opts.init_after_delay_secs > 0 {
+            tokio::time::sleep(Duration::from_secs(self.opts.init_after_delay_secs)).await;
+        }
+        for (_sig, calldata) in &self.opts.func_sigs {
+            let _ = self
+                .try_init_with_calldata(contract, block_number, calldata)
+                .await;
+        }
+    }
 }
 
 impl Action for InitscanAction {

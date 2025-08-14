@@ -101,3 +101,4 @@ pub mod tornado;
 pub mod transfer;
 pub mod large_transfer;
 pub mod initscan;
+pub mod history_init_scan;
