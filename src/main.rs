@@ -178,6 +178,56 @@ async fn main() -> Result<()> {
                         prov_arc.clone(),
                         actions::deployment::DeploymentOptions::default(),
                     ));
+                    // Initscan action (optional)
+                    if let Some(ac) = cfg.actions.get("Initscan") {
+                        if ac.enabled {
+                            let o = &ac.options;
+                            let from = o
+                                .get("from-address")
+                                .and_then(|v| v.as_str())
+                                .and_then(|s| s.parse().ok());
+                            let mut check_addrs: Vec<alloy_primitives::Address> = vec![];
+                            if let Some(arr) = o.get("check-addresses").and_then(|v| v.as_array()) {
+                                for a in arr {
+                                    if let Some(s) = a.as_str() {
+                                        if let Ok(addr) = s.parse() {
+                                            check_addrs.push(addr);
+                                        }
+                                    }
+                                }
+                            }
+                            let mut func_sigs: Vec<(String, Vec<u8>)> = vec![];
+                            if let Some(map) = o
+                                .get("function-signature-calldata")
+                                .and_then(|v| v.as_object())
+                            {
+                                for (k, v) in map {
+                                    if let Some(s) = v.as_str() {
+                                        let h = s.trim_start_matches("0x");
+                                        if let Ok(b) = hex::decode(h) {
+                                            func_sigs.push((k.clone(), b));
+                                        }
+                                    }
+                                }
+                            }
+                            let init_after =
+                                o.get("init-after-delay").and_then(|v| v.as_u64()).unwrap_or(1);
+                            let usd_threshold =
+                                o.get("alert-usd-threshold").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            let webhook_url = o
+                                .get("webhook-url")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                                .or_else(|| cli.webhook_url.clone());
+                            let init_known_freq = o.get("init-known-contracts-frequency").and_then(|v| v.as_u64());
+                            let known_path = o.get("initializable-contracts-filepath").and_then(|v| v.as_str()).map(|s| s.to_string());
+                            let is_opts = actions::initscan::InitscanOptions { from, check_addresses: check_addrs, init_after_delay_secs: init_after, usd_threshold, func_sigs, webhook_url, initializable_contracts_filepath: known_path, init_known_contracts_frequency_secs: init_known_freq };
+                            set2.add(actions::initscan::InitscanAction::new(
+                                prov_arc.clone(),
+                                is_opts,
+                            ));
+                        }
+                    }
                     if let Some(ac) = lt_cfg {
                         let min_h = ac
                             .options
@@ -299,6 +349,35 @@ async fn main() -> Result<()> {
                         set2.add(actions::ownership::OwnershipAction);
                         set2.add(actions::proxy::ProxyUpgradeAction::new(prov_arc.clone()));
                         set2.add(actions::deployment::DeploymentScanAction::new(prov_arc.clone(), actions::deployment::DeploymentOptions::default()));
+                        // Initscan action (optional)
+                        if let Some(ac) = cfg.actions.get("Initscan") {
+                            if ac.enabled {
+                                let o = &ac.options;
+                                let from = o.get("from-address").and_then(|v| v.as_str()).and_then(|s| s.parse().ok());
+                                let mut check_addrs: Vec<alloy_primitives::Address> = vec![];
+                                if let Some(arr) = o.get("check-addresses").and_then(|v| v.as_array()) {
+                                    for a in arr {
+                                        if let Some(s) = a.as_str() { if let Ok(addr) = s.parse() { check_addrs.push(addr); } }
+                                    }
+                                }
+                                let mut func_sigs: Vec<(String, Vec<u8>)> = vec![];
+                                if let Some(map) = o.get("function-signature-calldata").and_then(|v| v.as_object()) {
+                                    for (k, v) in map {
+                                        if let Some(s) = v.as_str() {
+                                            let h = s.trim_start_matches("0x");
+                                            if let Ok(b) = hex::decode(h) { func_sigs.push((k.clone(), b)); }
+                                        }
+                                    }
+                                }
+                                let init_after = o.get("init-after-delay").and_then(|v| v.as_u64()).unwrap_or(1);
+                                let usd_threshold = o.get("alert-usd-threshold").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                                let webhook_url = o.get("webhook-url").and_then(|v| v.as_str()).map(|s| s.to_string()).or_else(|| cli.webhook_url.clone());
+                                let init_known_freq = o.get("init-known-contracts-frequency").and_then(|v| v.as_u64());
+                                let known_path = o.get("initializable-contracts-filepath").and_then(|v| v.as_str()).map(|s| s.to_string());
+                                let is_opts = actions::initscan::InitscanOptions { from, check_addresses: check_addrs, init_after_delay_secs: init_after, usd_threshold, func_sigs, webhook_url, initializable_contracts_filepath: known_path, init_known_contracts_frequency_secs: init_known_freq };
+                                set2.add(actions::initscan::InitscanAction::new(prov_arc.clone(), is_opts));
+                            }
+                        }
                         if let Some(ac) = cfg.actions.get("LargeTransfer") {
                             let min_h = ac.options.get("min-amount").and_then(|v| v.as_str()).map(|s| s.to_string())
                                 .or_else(|| ac.options.get("min_amount").and_then(|v| v.as_str()).map(|s| s.to_string()));
