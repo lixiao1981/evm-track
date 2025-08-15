@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use super::{Action, TxRecord};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Semaphore};
 
 #[derive(Clone, Debug, Default)]
 pub struct InitscanOptions {
@@ -20,12 +20,15 @@ pub struct InitscanOptions {
     // persistence + retry
     pub initializable_contracts_filepath: Option<String>,
     pub init_known_contracts_frequency_secs: Option<u64>,
+    // limit concurrent init attempts; None or 0 => unlimited
+    pub max_inflight_inits: Option<usize>,
 }
 
 pub struct InitscanAction {
     provider: Arc<RootProvider<BoxTransport>>,
     opts: InitscanOptions,
     known: Arc<RwLock<Vec<KnownInit>>>,
+    sem: Option<Arc<Semaphore>>,
 }
 
 impl InitscanAction {
@@ -42,7 +45,11 @@ impl InitscanAction {
             Arc::new(RwLock::new(vec![]))
         };
 
-        let action = Self { provider: provider.clone(), opts: opts.clone(), known: known.clone() };
+        let sem = opts
+            .max_inflight_inits
+            .and_then(|n| if n > 0 { Some(Arc::new(Semaphore::new(n))) } else { None });
+
+        let action = Self { provider: provider.clone(), opts: opts.clone(), known: known.clone(), sem };
 
         if let (Some(path), Some(freq)) = (
             opts.initializable_contracts_filepath.clone(),
@@ -66,13 +73,12 @@ impl InitscanAction {
     }
 
     fn clone_for_task(&self) -> Self {
-        Self { provider: self.provider.clone(), opts: self.opts.clone(), known: self.known.clone() }
+        Self { provider: self.provider.clone(), opts: self.opts.clone(), known: self.known.clone(), sem: self.sem.clone() }
     }
 
     pub async fn retry_known_and_save(&self, path: &str) -> Result<()> {
         let snapshot = { self.known.read().await.clone() };
         if snapshot.is_empty() { return Ok(()); }
-        println!("[initscan] trying to init {} known contracts", snapshot.len());
         let mut kept: Vec<KnownInit> = Vec::with_capacity(snapshot.len());
         for item in snapshot.iter() {
             match self.evaluate_once(item.contract, None, &item.calldata).await {
@@ -86,7 +92,6 @@ impl InitscanAction {
             *w = kept.clone();
         }
         save_known_to_file(path, &kept)?;
-        println!("[initscan] saved known contracts to {} ({} entries)", path, kept.len());
         Ok(())
     }
 
@@ -142,6 +147,11 @@ impl InitscanAction {
 
     // Public helper for external callers (e.g. history scanner)
     pub async fn try_init_for_contract(&self, contract: Address, block_number: Option<u64>) {
+        // concurrency gate (optional)
+        let _permit = match &self.sem {
+            Some(s) => Some(s.clone().acquire_owned().await.expect("semaphore closed")),
+            None => None,
+        };
         if self.opts.init_after_delay_secs > 0 {
             tokio::time::sleep(Duration::from_secs(self.opts.init_after_delay_secs)).await;
         }
@@ -150,6 +160,7 @@ impl InitscanAction {
                 .try_init_with_calldata(contract, block_number, calldata)
                 .await;
         }
+        drop(_permit);
     }
 }
 
@@ -160,6 +171,11 @@ impl Action for InitscanAction {
             let this = self.clone_for_task();
             let block_number = t.block_number; // Option<u64>
             tokio::spawn(async move {
+                // concurrency gate (optional)
+                let _permit = match &this.sem {
+                    Some(s) => Some(s.clone().acquire_owned().await.expect("semaphore closed")),
+                    None => None,
+                };
                 if this.opts.init_after_delay_secs > 0 {
                     tokio::time::sleep(Duration::from_secs(this.opts.init_after_delay_secs)).await;
                 }
@@ -168,6 +184,7 @@ impl Action for InitscanAction {
                         eprintln!("[initscan] error on {contract:?}: {e}");
                     }
                 }
+                drop(_permit);
             });
         }
         Ok(())

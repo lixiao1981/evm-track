@@ -151,4 +151,10 @@ pub struct InitScanCmd {
     /// 结束区块（包含）
     #[arg(long)]
     pub to_block: u64,
+    /// 进度每 N 个区块打印一次（优先于 percent）
+    #[arg(long)]
+    pub progress_every: Option<u64>,
+    /// 进度按百分比打印（例如 1 表示每 1% 打印一次）
+    #[arg(long)]
+    pub progress_percent: Option<u64>,
 }

@@ -3,6 +3,7 @@ use alloy_provider::{Provider, RootProvider};
 use alloy_rpc_types_eth::Filter;
 use alloy_transport::BoxTransport;
 use anyhow::{Context, Result};
+use tracing::warn;
 
 use crate::{
     abi,
@@ -86,7 +87,14 @@ pub async fn run_blocks(
             .from_block(num)
             .to_block(num);
         throttle::acquire().await;
-        let logs = provider.get_logs(&filter).await?;
+        let logs = match provider.get_logs(&filter).await {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("get_logs error at block {}: {}; skipping", num, e);
+                num = num.saturating_add(1);
+                continue;
+            }
+        };
         for v in logs {
             let topic0 = v.topic0().cloned().unwrap_or(B256::ZERO);
             let topic0_hex = format!("0x{}", hex::encode(topic0));
@@ -114,11 +122,14 @@ pub async fn run_blocks(
             }
             if let Some(txh) = v.transaction_hash {
                 throttle::acquire().await;
-                if let Some(tx) = provider
-                    .get_transaction_by_hash(txh)
-                    .await
-                    .context("get_tx_by_hash")?
-                {
+                let tx_opt = match provider.get_transaction_by_hash(txh).await {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!("get_transaction_by_hash {:?} error: {}; skipping tx", txh, e);
+                        None
+                    }
+                };
+                if let Some(tx) = tx_opt {
                     let input = tx.input().as_ref();
                     if input.len() >= 4 {
                         let sel_hex = format!("0x{}", hex::encode(&input[0..4]));

@@ -231,7 +231,8 @@ async fn main() -> Result<()> {
                                 .or_else(|| cli.webhook_url.clone());
                             let init_known_freq = o.get("init-known-contracts-frequency").and_then(|v| v.as_u64());
                             let known_path = o.get("initializable-contracts-filepath").and_then(|v| v.as_str()).map(|s| s.to_string());
-                            let is_opts = actions::initscan::InitscanOptions { from, check_addresses: check_addrs, init_after_delay_secs: init_after, usd_threshold, func_sigs, webhook_url, initializable_contracts_filepath: known_path, init_known_contracts_frequency_secs: init_known_freq };
+                            let max_inflight_inits = o.get("init-concurrency").and_then(|v| v.as_u64()).map(|v| v as usize);
+                            let is_opts = actions::initscan::InitscanOptions { from, check_addresses: check_addrs, init_after_delay_secs: init_after, usd_threshold, func_sigs, webhook_url, initializable_contracts_filepath: known_path, init_known_contracts_frequency_secs: init_known_freq, max_inflight_inits };
                             set2.add(actions::initscan::InitscanAction::new(
                                 prov_arc.clone(),
                                 is_opts,
@@ -400,7 +401,8 @@ async fn main() -> Result<()> {
                                 let webhook_url = o.get("webhook-url").and_then(|v| v.as_str()).map(|s| s.to_string()).or_else(|| cli.webhook_url.clone());
                                 let init_known_freq = o.get("init-known-contracts-frequency").and_then(|v| v.as_u64());
                                 let known_path = o.get("initializable-contracts-filepath").and_then(|v| v.as_str()).map(|s| s.to_string());
-                                let is_opts = actions::initscan::InitscanOptions { from, check_addresses: check_addrs, init_after_delay_secs: init_after, usd_threshold, func_sigs, webhook_url, initializable_contracts_filepath: known_path, init_known_contracts_frequency_secs: init_known_freq };
+                                let max_inflight_inits = o.get("init-concurrency").and_then(|v| v.as_u64()).map(|v| v as usize);
+                                let is_opts = actions::initscan::InitscanOptions { from, check_addresses: check_addrs, init_after_delay_secs: init_after, usd_threshold, func_sigs, webhook_url, initializable_contracts_filepath: known_path, init_known_contracts_frequency_secs: init_known_freq, max_inflight_inits };
                                 set2.add(actions::initscan::InitscanAction::new(prov_arc.clone(), is_opts));
                             }
                         }
@@ -484,6 +486,7 @@ async fn main() -> Result<()> {
             let init_known_freq = o.get("init-known-contracts-frequency").and_then(|v| v.as_u64());
             let known_path = o.get("initializable-contracts-filepath").and_then(|v| v.as_str()).map(|s| s.to_string());
 
+            let max_inflight_inits = o.get("init-concurrency").and_then(|v| v.as_u64()).map(|v| v as usize);
             let is_opts = actions::initscan::InitscanOptions {
                 from,
                 check_addresses: check_addrs,
@@ -493,12 +496,15 @@ async fn main() -> Result<()> {
                 webhook_url,
                 initializable_contracts_filepath: known_path,
                 init_known_contracts_frequency_secs: init_known_freq,
+                max_inflight_inits: max_inflight_inits,
             };
 
             let opts = actions::history_init_scan::HistoryInitScanOptions {
                 from_block: cmd.from_block,
                 to_block: cmd.to_block,
                 initscan: is_opts,
+                progress_every: cmd.progress_every,
+                progress_percent: cmd.progress_percent,
             };
             let provider = std::sync::Arc::new(provider);
             actions::history_init_scan::run(provider, opts).await
