@@ -4,9 +4,11 @@ use alloy_provider::{Provider, RootProvider};
 use alloy_transport::BoxTransport;
 use anyhow::Result;
 
-use crate::{actions::{Action, ActionSet, BlockRecord}, cli::RangeFlags, runtime};
+use crate::actions::ActionSet;
 
 use super::initscan::{InitscanAction, InitscanOptions};
+use serde::Deserialize;
+use tracing::warn;
 
 #[derive(Debug, Clone)]
 pub struct HistoryInitScanOptions {
@@ -17,69 +19,42 @@ pub struct HistoryInitScanOptions {
     pub progress_percent: Option<u64>,
 }
 
-/// Reuse the unified blocks pipeline: build an ActionSet with only Initscan
-/// and run runtime::historical::run_blocks over the requested range.
 pub async fn run(
     provider: Arc<RootProvider<BoxTransport>>,
     opts: HistoryInitScanOptions,
 ) -> Result<()> {
-    let prov_arc = Arc::new(provider.as_ref().clone());
-    let mut set = ActionSet::new();
-    set.add(ProgressAction::new_with_tick(
-        opts.from_block,
-        opts.to_block,
-        opts.progress_every,
-        opts.progress_percent,
-    ));
-    set.add(InitscanAction::new(prov_arc.clone(), opts.initscan.clone()));
-    let set = Arc::new(set);
-    let range = RangeFlags {
-        config: None,
-        from_block: opts.from_block,
-        to_block: Some(opts.to_block),
-        step_blocks: 1,
-    };
-    runtime::historical::run_blocks(provider.as_ref().clone(), vec![], &range, Some(set)).await
-}
+    // Explicit block walking and CREATE detection (independent of logs)
+    let initscan = InitscanAction::new(Arc::new(provider.as_ref().clone()), opts.initscan.clone());
+    let from = opts.from_block;
+    let to = opts.to_block;
+    let total = to.saturating_sub(from).saturating_add(1);
+    let tick = if let Some(n) = opts.progress_every { n.max(1) } else if let Some(p) = opts.progress_percent { ((total.saturating_mul(p.max(1))) / 100).max(1) } else { (total / 100).max(1) };
+    println!("[initscan] starting historical scan: from={} to={} total={} blocks", from, to, total);
+    let mut processed: u64 = 0;
 
-// Simple block progress reporter action
-struct ProgressAction {
-    from: u64,
-    to: u64,
-    total: u64,
-    processed: std::sync::Mutex<u64>,
-    tick: u64,
-}
+    #[derive(Deserialize)]
+    struct TxLite { hash: alloy_primitives::B256, #[serde(default)] to: Option<alloy_primitives::Address> }
+    #[derive(Deserialize)]
+    struct BlockLite { #[allow(dead_code)] number: Option<String>, #[serde(default)] transactions: Vec<TxLite> }
 
-impl ProgressAction {
-    fn new_with_tick(from: u64, to: u64, every: Option<u64>, percent: Option<u64>) -> Self {
-        let total = to.saturating_sub(from).saturating_add(1);
-        let tick = if let Some(n) = every {
-            n.max(1)
-        } else if let Some(p) = percent {
-            ((total.saturating_mul(p.max(1))) / 100).max(1)
-        } else {
-            (total / 100).max(1)
+    let mut n = from;
+    while n <= to {
+        let block_hex = format!("0x{:x}", n);
+        let v: serde_json::Value = match provider.client().request("eth_getBlockByNumber", serde_json::json!([block_hex, true])).await {
+            Ok(v) => v,
+            Err(e) => { warn!("eth_getBlockByNumber {} error: {}; skipping", n, e); processed = processed.saturating_add(1); if processed % tick == 0 || processed == total { let pct = (processed as f64 / total as f64) * 100.0; println!("[initscan] block progress: {}/{} ({:.0}%) current={}", processed, total, pct, n); } n = n.saturating_add(1); continue }
         };
-        println!(
-            "[initscan] starting historical scan: from={} to={} total={} blocks",
-            from, to, total
-        );
-        Self { from, to, total, processed: std::sync::Mutex::new(0), tick }
-    }
-}
-
-impl Action for ProgressAction {
-    fn on_block(&self, b: &BlockRecord) -> anyhow::Result<()> {
-        let mut p = self.processed.lock().unwrap();
-        *p = p.saturating_add(1);
-        if *p % self.tick == 0 || *p == self.total {
-            let pct = (*p as f64 / self.total as f64) * 100.0;
-            println!(
-                "[initscan] block progress: {}/{} ({:.0}%) current={}",
-                *p, self.total, pct, b.number
-            );
+        if v.is_null() { processed = processed.saturating_add(1); if processed % tick == 0 || processed == total { let pct = (processed as f64 / total as f64) * 100.0; println!("[initscan] block progress: {}/{} ({:.0}%) current={}", processed, total, pct, n); } n = n.saturating_add(1); continue; }
+        let b: BlockLite = match serde_json::from_value(v) { Ok(b) => b, Err(e) => { warn!("parse block {} error: {}; skipping", n, e); processed = processed.saturating_add(1); if processed % tick == 0 || processed == total { let pct = (processed as f64 / total as f64) * 100.0; println!("[initscan] block progress: {}/{} ({:.0}%) current={}", processed, total, pct, n); } n = n.saturating_add(1); continue } };
+        for tx in b.transactions {
+            if tx.to.is_none() {
+                let receipt = match provider.get_transaction_receipt(tx.hash).await { Ok(r) => r, Err(e) => { warn!("get_transaction_receipt {:?} error: {}; skipping", tx.hash, e); None } };
+                if let Some(r) = receipt { if let Some(addr) = r.contract_address { initscan.try_init_for_contract(addr, Some(n)).await; } }
+            }
         }
-        Ok(())
+        processed = processed.saturating_add(1);
+        if processed % tick == 0 || processed == total { let pct = (processed as f64 / total as f64) * 100.0; println!("[initscan] block progress: {}/{} ({:.0}%) current={}", processed, total, pct, n); }
+        n = n.saturating_add(1);
     }
+    Ok(())
 }
