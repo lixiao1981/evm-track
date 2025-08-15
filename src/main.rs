@@ -232,7 +232,8 @@ async fn main() -> Result<()> {
                             let init_known_freq = o.get("init-known-contracts-frequency").and_then(|v| v.as_u64());
                             let known_path = o.get("initializable-contracts-filepath").and_then(|v| v.as_str()).map(|s| s.to_string());
                             let max_inflight_inits = o.get("init-concurrency").and_then(|v| v.as_u64()).map(|v| v as usize);
-                            let is_opts = actions::initscan::InitscanOptions { from, check_addresses: check_addrs, init_after_delay_secs: init_after, usd_threshold, func_sigs, webhook_url, initializable_contracts_filepath: known_path, init_known_contracts_frequency_secs: init_known_freq, max_inflight_inits };
+                            let debug = o.get("debug").and_then(|v| v.as_bool()).unwrap_or(false);
+                            let is_opts = actions::initscan::InitscanOptions { from, check_addresses: check_addrs, init_after_delay_secs: init_after, usd_threshold, func_sigs, webhook_url, initializable_contracts_filepath: known_path, init_known_contracts_frequency_secs: init_known_freq, max_inflight_inits, debug };
                             set2.add(actions::initscan::InitscanAction::new(
                                 prov_arc.clone(),
                                 is_opts,
@@ -402,7 +403,8 @@ async fn main() -> Result<()> {
                                 let init_known_freq = o.get("init-known-contracts-frequency").and_then(|v| v.as_u64());
                                 let known_path = o.get("initializable-contracts-filepath").and_then(|v| v.as_str()).map(|s| s.to_string());
                                 let max_inflight_inits = o.get("init-concurrency").and_then(|v| v.as_u64()).map(|v| v as usize);
-                                let is_opts = actions::initscan::InitscanOptions { from, check_addresses: check_addrs, init_after_delay_secs: init_after, usd_threshold, func_sigs, webhook_url, initializable_contracts_filepath: known_path, init_known_contracts_frequency_secs: init_known_freq, max_inflight_inits };
+                                let debug = o.get("debug").and_then(|v| v.as_bool()).unwrap_or(false);
+                                let is_opts = actions::initscan::InitscanOptions { from, check_addresses: check_addrs, init_after_delay_secs: init_after, usd_threshold, func_sigs, webhook_url, initializable_contracts_filepath: known_path, init_known_contracts_frequency_secs: init_known_freq, max_inflight_inits, debug };
                                 set2.add(actions::initscan::InitscanAction::new(prov_arc.clone(), is_opts));
                             }
                         }
@@ -497,6 +499,7 @@ async fn main() -> Result<()> {
                 initializable_contracts_filepath: known_path,
                 init_known_contracts_frequency_secs: init_known_freq,
                 max_inflight_inits: max_inflight_inits,
+                debug: o.get("debug").and_then(|v| v.as_bool()).unwrap_or(false),
             };
 
             let opts = actions::history_init_scan::HistoryInitScanOptions {

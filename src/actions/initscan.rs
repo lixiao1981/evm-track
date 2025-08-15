@@ -22,6 +22,8 @@ pub struct InitscanOptions {
     pub init_known_contracts_frequency_secs: Option<u64>,
     // limit concurrent init attempts; None or 0 => unlimited
     pub max_inflight_inits: Option<usize>,
+    // enable verbose debug logs
+    pub debug: bool,
 }
 
 pub struct InitscanAction {
@@ -72,13 +74,14 @@ impl InitscanAction {
         action
     }
 
-    fn clone_for_task(&self) -> Self {
-        Self { provider: self.provider.clone(), opts: self.opts.clone(), known: self.known.clone(), sem: self.sem.clone() }
-    }
+    fn clone_for_task(&self) -> Self { Self { provider: self.provider.clone(), opts: self.opts.clone(), known: self.known.clone(), sem: self.sem.clone() } }
+    #[inline]
+    fn dbg<S: AsRef<str>>(&self, s: S) { if self.opts.debug { println!("[initscan][debug] {}", s.as_ref()); } }
 
     pub async fn retry_known_and_save(&self, path: &str) -> Result<()> {
         let snapshot = { self.known.read().await.clone() };
         if snapshot.is_empty() { return Ok(()); }
+        if self.opts.debug { println!("[initscan][debug] retry_known_and_save: {} entries", snapshot.len()); }
         let mut kept: Vec<KnownInit> = Vec::with_capacity(snapshot.len());
         for item in snapshot.iter() {
             match self.evaluate_once(item.contract, None, &item.calldata).await {
@@ -102,6 +105,7 @@ impl InitscanAction {
                 w.push(KnownInit { contract, calldata: calldata.to_vec() });
                 save_known_to_file(path, &w)?;
                 println!("[initscan] added {} to known list", format!("0x{}", hex::encode(contract.0)));
+                self.dbg(format!("persisted to {} ({} entries)", path, w.len()));
             }
         }
         Ok(())
@@ -109,24 +113,29 @@ impl InitscanAction {
 
     async fn try_init_with_calldata(&self, contract: Address, block_number: Option<u64>, calldata: &[u8]) -> Result<()> {
         // Eth call check
+        self.dbg(format!("try_init_with_calldata: contract=0x{} block={:?} calldata_len={} head=0x{}", hex::encode(contract.0), block_number, calldata.len(), hex::encode(&calldata[..calldata.len().min(8)])));
         let ok = eth_call_ok(self.provider.as_ref(), self.opts.from, contract, calldata, block_number).await?;
+        self.dbg(format!("eth_call ok={} (no revert)", ok));
         if !ok { return Ok(()); }
         // Trace
         let tr = trace_call(self.provider.as_ref(), self.opts.from, contract, calldata, block_number).await?;
-        if !trace_success(&tr) { return Ok(()); }
+        self.dbg(format!("trace_call returned: traces={} state_diff_len={}", tr.traces.len(), serde_json::to_string(&tr.state_diff).unwrap_or_default().len()));
+        if !trace_success(&tr) { self.dbg("trace_call had error in traces"); return Ok(()); }
         let contains = state_diff_contains_any_addr(&tr, &self.opts.check_addresses);
+        self.dbg(format!("stateDiff contains check address = {}", contains));
         if !contains { return Ok(()); }
         // Fallback sanity
         let random_sel = hex::decode("6fcb831b").unwrap_or_default();
         let tr2 = trace_call(self.provider.as_ref(), self.opts.from, contract, &random_sel, block_number).await?;
         let contains2 = trace_success(&tr2) && state_diff_contains_any_addr(&tr2, &self.opts.check_addresses);
+        self.dbg(format!("random selector check contains = {}", contains2));
         if contains && !contains2 {
             // Passed heuristics: alert + persist
             let msg = format!(
                 "# Interesting contract\nAddress: 0x{}\ncalldataLen: {}\n",
                 hex::encode(contract.0), calldata.len()
             );
-            if let Some(url) = &self.opts.webhook_url { let _ = send_webhook(url, &msg).await; } else { println!("[initscan] {}", msg.replace('\n', " ")); }
+            if let Some(url) = &self.opts.webhook_url { self.dbg(format!("sending webhook to {}", url)); let _ = send_webhook(url, &msg).await; } else { println!("[initscan] {}", msg.replace('\n', " ")); }
             let _ = self.add_known_and_save(contract, calldata).await;
         }
         Ok(())
@@ -152,6 +161,7 @@ impl InitscanAction {
             Some(s) => Some(s.clone().acquire_owned().await.expect("semaphore closed")),
             None => None,
         };
+        self.dbg(format!("try_init_for_contract: contract=0x{} block={:?} func_variants={}", hex::encode(contract.0), block_number, self.opts.func_sigs.len()));
         if self.opts.init_after_delay_secs > 0 {
             tokio::time::sleep(Duration::from_secs(self.opts.init_after_delay_secs)).await;
         }
@@ -176,6 +186,7 @@ impl Action for InitscanAction {
                     Some(s) => Some(s.clone().acquire_owned().await.expect("semaphore closed")),
                     None => None,
                 };
+                this.dbg(format!("on_tx: deployment detected contract=0x{} block={:?}", hex::encode(contract.0), block_number));
                 if this.opts.init_after_delay_secs > 0 {
                     tokio::time::sleep(Duration::from_secs(this.opts.init_after_delay_secs)).await;
                 }
