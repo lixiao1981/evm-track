@@ -81,7 +81,7 @@ pub async fn run(
                             let err_str = e.to_string();
                             if err_str.contains("-32000") {
                                 // If we get a common provider error, try to fetch from the public provider as a fallback.
-                                warn!("Got -32000 error, retrying with public provider for tx: {}", tx.hash);
+                                info!("Got -32000 error, retrying with public provider for tx: {}", tx.hash);
                                 match public_provider_get_receipt(tx.hash).await {
                                     Ok(Some(receipt_from_public)) => Some(receipt_from_public),
                                     Ok(None) => None,
