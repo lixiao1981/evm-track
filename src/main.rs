@@ -13,7 +13,7 @@ mod data_cmd;
 mod provider;
 mod runtime;
 mod throttle;
-
+mod public_provider;
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = cli::Cli::parse();
