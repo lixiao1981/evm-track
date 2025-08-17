@@ -3,7 +3,7 @@ use alloy_provider::{Provider, RootProvider};
 use alloy_transport::BoxTransport;
 use anyhow::Result;
 use tracing::info;
-use crate::public_provider::public_provider_get_receipt;
+use crate::provider::public_provider_get_receipt;
 // use crate::actions::ActionSet;
 
 use super::initscan::{InitscanAction, InitscanOptions};
