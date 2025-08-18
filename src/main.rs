@@ -1,21 +1,13 @@
 use anyhow::Result;
 use clap::Parser;
-use cli::Commands;
 use tracing_subscriber::EnvFilter;
+use evm_track::cli::{Cli, Commands, DataWhichCmd};
+use evm_track::commands::{track, init_scan_cmd, sel_scan_cmd};
+use evm_track::data_cmd;
 
-mod abi;
-mod actions;
-mod app;
-mod commands;
-mod cli;
-mod config;
-mod data_cmd;
-mod provider;
-mod runtime;
-mod throttle;
 #[tokio::main]
 async fn main() -> Result<()> {
-    let cli = cli::Cli::parse();
+    let cli = Cli::parse();
     let filter_layer = if cli.verbose {
         EnvFilter::new("info")
     } else {
@@ -27,15 +19,15 @@ async fn main() -> Result<()> {
 
     match &cli.command {
         Commands::Track(track) => {
-            return commands::track::run(&cli, &track.which, &track.common).await;
+            return track::run(&cli, &track.which, &track.common).await;
         }
         Commands::Data(cmd) => match &cmd.which {
-            cli::DataWhichCmd::Event(args) => {
-                crate::data_cmd::add_events_from_abi(&args.abi, &args.output)?;
+            DataWhichCmd::Event(args) => {
+                data_cmd::add_events_from_abi(&args.abi, &args.output)?;
                 Ok(())
             }
-            cli::DataWhichCmd::FetchAbi(args) => {
-                let s = crate::data_cmd::fetch_abi_from_scanner(
+            DataWhichCmd::FetchAbi(args) => {
+                let s = data_cmd::fetch_abi_from_scanner(
                     &args.address,
                     &args.scanner_url,
                     args.api_key.as_deref(),
@@ -47,11 +39,10 @@ async fn main() -> Result<()> {
             }
         },
         Commands::InitScan(cmd) => {
-            // 配置加载（仅此子命令层）
-            return commands::init_scan_cmd::run(&cli, cmd).await;
+            return init_scan_cmd::run(&cli, cmd).await;
         }
         Commands::SelScan(cmd) => {
-            return commands::sel_scan_cmd::run(&cli, cmd).await;
+            return sel_scan_cmd::run(&cli, cmd).await;
         }
     }
 }

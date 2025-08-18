@@ -58,6 +58,7 @@ pub async fn run(cli: &cli::Cli, cmd: &cli::InitScanCmd) -> Result<()> {
         initscan: is_opts,
         progress_every: cmd.progress_every,
         progress_percent: cmd.progress_percent,
+        concurrency: cmd.concurrency,
     };
     let provider = Arc::new(provider);
     actions::history_init_scan::run(provider, opts).await

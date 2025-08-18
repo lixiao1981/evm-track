@@ -159,6 +159,9 @@ pub struct InitScanCmd {
     /// 进度按百分比打印（例如 1 表示每 1% 打印一次）
     #[arg(long)]
     pub progress_percent: Option<u64>,
+    /// 并发数量
+    #[arg(long, default_value_t = 10)]
+    pub concurrency: usize,
 }
 
 #[derive(Debug, Args)]
