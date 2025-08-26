@@ -1,0 +1,24 @@
+{
+  "rpcurl": "ws://192.168.80.1:8546",
+  "max-requests-per-second": 0,
+    "actions": {
+      "Initscan": {
+        "enabled": true,
+        "addresses": {},
+        "options": {
+          "from-address": "0x4b...02db",
+          "check-addresses": ["0x4b...02db"],
+          "init-after-delay": 3,
+          "init-concurrency": 8,
+          "debug": true,
+          "function-signature-calldata": {
+            "initialize()": "0x8129fc1c",
+            "init()": "0xe1c7392a"
+          },
+          "initializable-contracts-filepath": "./data/eth_initializable_contracts.json",
+          "init-known-contracts-frequency": 86400
+        }
+      }
+    }
+  
+}

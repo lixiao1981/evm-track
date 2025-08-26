@@ -1,0 +1,13 @@
+# Rust build
+/target
+**/*.rs.bk
+
+# IDE/editor
+.vscode/
+.idea/
+*.iml
+.DS_Store
+
+# Env/local
+.env
+.env.*
