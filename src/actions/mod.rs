@@ -112,3 +112,4 @@ pub mod initscan;
 pub mod history_init_scan;
 pub mod selector_scan;
 pub mod history_tx_scan;
+pub mod db_log;

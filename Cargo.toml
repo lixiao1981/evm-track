@@ -29,5 +29,13 @@ base64 = "0.22"
 alloy-rpc-types = { version = "0.8.3", features = ["trace"] }
 alloy-rpc-types-debug = "0.8.3"
 url = "2.5.4"
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "json", "chrono"] }
 alloy = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+indicatif = { version = "0.17", features = ["tokio"] }
+dotenv = "0.15"
+
+[[bin]]
+name = "import_json_sql"
+path = "src/bin/import_json_sql.rs"
  

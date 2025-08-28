@@ -24,6 +24,7 @@ async fn process_line(
     writer: Arc<Mutex<BufWriter<TokioFile>>>,
 ) {
     match serde_json::from_str::<TxLite>(&line) {
+
         Ok(tx) => {
             // info!("Scanning tx: {}", tx.hash);
             match crate::provider::public_provider_get_transactions_trace(
@@ -174,12 +175,10 @@ mod tests {
             assert!(trace_opt.is_some(), "Trace should not be None for hash {}", tx.hash);
             let trace = trace_opt.unwrap();
             println!(
-                "Successfully fetched trace for {}: Type={}, From={}, To={{:?}}, Input={}",
+                "Successfully fetched trace for {}: Type={}, From={}",
                 tx.hash,
                 trace.typ,
-                trace.from,
-                trace.to,
-                trace.input
+                trace.from
             );
         }
     }
