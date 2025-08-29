@@ -38,4 +38,8 @@ dotenv = "0.15"
 [[bin]]
 name = "import_json_sql"
 path = "src/bin/import_json_sql.rs"
+
+[[bin]]
+name = "sql_get_contract"
+path = "src/bin/sql_get_contract.rs"
  
