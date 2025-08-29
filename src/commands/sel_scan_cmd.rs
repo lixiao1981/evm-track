@@ -13,7 +13,7 @@ pub async fn run(cli: &cli::Cli, cmd: &cli::SelScanCmd) -> Result<()> {
     if let Some(p) = &cfg.event_sigs_path { abi::set_event_sigs_path(p.clone()); }
     if let Some(p) = &cfg.func_sigs_path { abi::set_func_sigs_path(p.clone()); }
     crate::throttle::init(cfg.max_requests_per_second);
-    let provider = provider::connect_ws(&cfg.rpcurl).await?;
+    let provider = provider::connect_auto(&cfg.rpcurl).await?;
     let mut set = actions::ActionSet::new();
     let s = cmd.selector.trim_start_matches("0x");
     anyhow::ensure!(s.len() == 8, "selector must be 4 bytes (8 hex chars)");

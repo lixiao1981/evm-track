@@ -20,7 +20,7 @@ async fn main() -> Result<()> {
     // 1. Load configuration from .env file
     dotenv::dotenv().ok();
     let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let rpc_url = env::var("RPC_URL").expect("RPC_URL for a WebSocket node must be set");
+    let rpc_url = env::var("RPC_URL").expect("RPC_URL for a node must be set");
 
     const NUM_WORKERS: u32 = 8;
     const BATCH_SIZE: i64 = 100;
@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
 
     // 2. Connect to services
     let db = db::connect(&db_url).await?;
-    let provider = Arc::new(provider::connect_ws(&rpc_url).await?);
+    let provider = Arc::new(provider::connect_auto(&rpc_url).await?);
     println!("Successfully connected to database and RPC node.");
 
     // 3. Reset any jobs that were stuck in 'processing' state from a previous run
@@ -80,8 +80,8 @@ async fn main() -> Result<()> {
                 let num_in_batch = hashes.len();
 
                 // Process each hash in the claimed batch
-                for hash_str in hashes {
-                    let tx_hash = match B256::from_str(&hash_str) {
+                for hash_str in &hashes {
+                    let tx_hash = match B256::from_str(hash_str) {
                         Ok(h) => h,
                         Err(_) => continue, // Skip if hash is invalid
                     };
@@ -89,19 +89,21 @@ async fn main() -> Result<()> {
                     let receipt_result = provider.get_transaction_receipt(tx_hash).await;
 
                     let contract_address = match receipt_result {
-                        Ok(Some(receipt)) => receipt.contract_address,
-                        _ => None, // Treat errors or empty receipts as not a contract creation
+                        Ok(Some(receipt)) => receipt.contract_address.map(|a| format!("{:?}", a)),
+                        Ok(None) => None, // No receipt found
+                        Err(e) => {
+                            eprintln!("Worker {}: RPC error for hash {}: {}", i, hash_str, e);
+                            None // Treat RPC errors as if no address was found
+                        }
                     };
 
-                    let addr_str = contract_address.map(|addr| format!("{:?}", addr));
-
-                    // Mark the job as complete in the database
-                    if let Err(e) = db::mark_job_complete(&pool, &hash_str, addr_str.as_deref()).await {
+                    // Mark the job as complete, saving the address if found.
+                    if let Err(e) = db::set_contract_job_complete(&pool, hash_str, contract_address).await {
                         eprintln!("Worker {} failed to update DB for hash {}: {}", i, hash_str, e);
                     }
                 }
                 // Update progress bar
-                pb.inc(num_in_batch as u64);
+                pb.inc(hashes.len() as u64);
             }
         });
     }

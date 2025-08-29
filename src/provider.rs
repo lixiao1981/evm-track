@@ -8,25 +8,11 @@ use alloy::primitives::b256;
 use alloy_rpc_types::trace::geth::{CallFrame, GethDebugTracingOptions};
 
 // Connect using the built-in connection string API and return a boxed transport
-pub async fn connect_ws(url: &str) -> Result<RootProvider<BoxTransport>> {
-    if !url.starts_with("ws") {
-        return Err(anyhow!("rpcurl must be a websocket (ws/wss), got {url}"));
-    }
+pub async fn connect_auto(url: &str) -> Result<RootProvider<BoxTransport>> {
     let provider = ProviderBuilder::new()
         .on_builtin(url)
         .await
-        .context("connecting websocket")?;
-    Ok(provider)
-}
-
-pub async fn connect_ipc(path: &str) -> Result<RootProvider<BoxTransport>> {
-    if !path.starts_with('/') {
-        return Err(anyhow!("IPC path must be an absolute path, got {path}"));
-    }
-    let provider = ProviderBuilder::new()
-        .on_builtin(path)
-        .await
-        .context("connecting IPC")?;
+        .context(format!("Failed to connect to provider at {url}"))?;
     Ok(provider)
 }
 

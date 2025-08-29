@@ -54,7 +54,7 @@ async fn main() -> Result<()> {
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("--config is required for history-tx-scan"))?;
             let cfg = config::load_config(cfg_path)?;
-            let provider = Arc::new(provider::connect_ws(&cfg.rpcurl).await?);
+            let provider = Arc::new(provider::connect_auto(&cfg.rpcurl).await?);
             return history_tx_scan::run(provider, cmd).await;
         }
     }

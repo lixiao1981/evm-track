@@ -24,7 +24,7 @@ async fn run_realtime(cli: &crate::cli::Cli, rt: &RealtimeCmd, common: &crate::c
     if let Some(p) = &cli.func_sigs { abi::set_func_sigs_path(p.display().to_string()); }
     if let Some(p) = &cfg.event_sigs_path { abi::set_event_sigs_path(p.clone()); }
     if let Some(p) = &cfg.func_sigs_path { abi::set_func_sigs_path(p.clone()); }
-    let provider = provider::connect_ws(&cfg.rpcurl).await?;
+    let provider = provider::connect_auto(&cfg.rpcurl).await?;
     let addrs = config::collect_enabled_addresses(&cfg)?;
     let set = Arc::new(app::build_actionset(&provider, &cfg, &cli));
     if rt.blocks {
@@ -64,7 +64,7 @@ async fn run_historical(
                 if let Some(fp) = &cfg2.func_sigs_path { abi::set_func_sigs_path(fp.clone()); }
             }
             crate::throttle::init(cfg2.max_requests_per_second);
-            let provider = provider::connect_ws(&cfg2.rpcurl).await?;
+            let provider = provider::connect_auto(&cfg2.rpcurl).await?;
             let addrs = config::collect_enabled_addresses(&cfg2)?;
             let set = app::build_actionset(&provider, &cfg2, &cli);
             runtime::historical::run_events(provider, addrs, range, Some(Arc::new(set))).await
@@ -77,7 +77,7 @@ async fn run_historical(
                 if let Some(fp) = &cfg2.func_sigs_path { abi::set_func_sigs_path(fp.clone()); }
             }
             crate::throttle::init(cfg2.max_requests_per_second);
-            let provider = provider::connect_ws(&cfg2.rpcurl).await?;
+            let provider = provider::connect_auto(&cfg2.rpcurl).await?;
             let addrs = config::collect_enabled_addresses(&cfg2)?;
             let set2 = app::build_actionset(&provider, &cfg2, &cli);
             runtime::historical::run_blocks(provider, addrs, range, Some(Arc::new(set2))).await

@@ -13,7 +13,7 @@ pub async fn run(cli: &cli::Cli, cmd: &cli::InitScanCmd) -> Result<()> {
     if let Some(p) = &cfg.event_sigs_path { abi::set_event_sigs_path(p.clone()); }
     if let Some(p) = &cfg.func_sigs_path { abi::set_func_sigs_path(p.clone()); }
     crate::throttle::init(cfg.max_requests_per_second);
-    let provider = provider::connect_ws(&cfg.rpcurl).await?;
+    let provider = provider::connect_auto(&cfg.rpcurl).await?;
 
     let ac = cfg
         .actions
