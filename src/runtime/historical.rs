@@ -2,7 +2,7 @@ use alloy_primitives::{Address, B256, hex};
 use alloy_provider::{Provider, RootProvider};
 use alloy_rpc_types_eth::Filter;
 use alloy_transport::BoxTransport;
-use anyhow::{Context, Result};
+use crate::error::Result;
 use serde::Deserialize;
 use tracing::warn;
 
@@ -33,10 +33,7 @@ pub async fn run_events(
             .from_block(cur)
             .to_block(end);
         throttle::acquire().await;
-        let logs = provider
-            .get_logs(&filter)
-            .await
-            .with_context(|| format!("get_logs {}-{}", cur, end))?;
+        let logs = provider.get_logs(&filter).await?;
         for v in logs {
             let topic0 = v.topic0().cloned().unwrap_or(B256::ZERO);
             let topic0_hex = format!("0x{}", hex::encode(topic0));

@@ -1,8 +1,7 @@
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
-
+use crate::error::{AppError, Result};
 use alloy_primitives::Address;
-use anyhow::{Context, Result};
 use serde::Deserialize;
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use tracing::warn;
 
 #[derive(Debug, Deserialize)]
@@ -32,9 +31,8 @@ pub struct ActionConfig {
 }
 
 pub fn load_config(path: &PathBuf) -> Result<Config> {
-    let data = std::fs::read_to_string(path)
-        .with_context(|| format!("reading config file {}", path.display()))?;
-    let cfg: Config = serde_json::from_str(&data).context("parsing config JSON")?;
+    let data = std::fs::read_to_string(path)?;
+    let cfg: Config = serde_json::from_str(&data)?;
     Ok(cfg)
 }
 
@@ -44,7 +42,7 @@ pub fn collect_enabled_addresses(cfg: &Config) -> Result<Vec<Address>> {
         if action.enabled {
             for (addr_str, _props) in action.addresses.iter() {
                 let addr = Address::from_str(addr_str)
-                    .with_context(|| format!("invalid address in config: {addr_str}"))?;
+                    .map_err(|e| AppError::Config(format!("invalid address in config: {} ({})", addr_str, e)))?;
                 set.insert(addr);
             }
         }

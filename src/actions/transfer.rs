@@ -8,6 +8,7 @@ use tokio::sync::{Mutex, Semaphore};
 
 use super::{Action, EventRecord};
 use crate::throttle;
+use crate::error::AppError;
 
 pub struct TransferAction {
     provider: Arc<RootProvider<BoxTransport>>,
@@ -92,7 +93,7 @@ fn decode_bytes32_symbol(data: &[u8]) -> Option<String> {
 }
 
 impl Action for TransferAction {
-    fn on_event(&self, e: &EventRecord) -> anyhow::Result<()> {
+    fn on_event(&self, e: &EventRecord) -> Result<(), AppError> {
         if let Some(name) = &e.name {
             if name == "Transfer" {
                 let token = e.address;

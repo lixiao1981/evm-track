@@ -59,7 +59,8 @@ async fn main() -> Result<()> {
     let pb = ProgressBar::new(total_lines);
     pb.set_style(
         ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")? // Corrected: Removed extra backslash before newline
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+            .unwrap()
             .progress_chars("##-"),
     );
 

@@ -1,6 +1,6 @@
 use super::TxLite;
 use crate::cli;
-use anyhow::Result;
+use crate::error::Result;
 use futures::stream::StreamExt;
 use std::io::{self, BufRead};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -145,7 +145,7 @@ mod tests {
     async fn test_fetch_first_20_traces() {
         let rpcurl = "ws://192.168.2.58:8646";
         let provider =
-            Arc::new(provider::connect_ws(rpcurl).await.expect("Failed to connect to provider"));
+            Arc::new(provider::connect_ws_provider(rpcurl).await.expect("Failed to connect to provider"));
 
         let file = std::fs::File::open("data/null.json").expect("Failed to open null.json");
         let reader = io::BufReader::new(file);

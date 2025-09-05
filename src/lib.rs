@@ -1,3 +1,4 @@
+pub mod error;
 pub mod abi;
 pub mod actions;
 pub mod app;
@@ -9,5 +10,5 @@ pub mod db;
 pub mod provider;
 pub mod runtime;
 pub mod throttle;
-
+pub mod source;
 pub use crate::actions::history_tx_scan;

@@ -1,9 +1,10 @@
 use super::{Action, EventRecord};
+use crate::error::Result;
 
 pub struct OwnershipAction;
 
 impl Action for OwnershipAction {
-    fn on_event(&self, e: &EventRecord) -> anyhow::Result<()> {
+    fn on_event(&self, e: &EventRecord) -> Result<()> {
         if let Some(name) = &e.name {
             if name == "OwnershipTransferred" || name == "OwnershipTransfer" {
                 let mut previous = None;

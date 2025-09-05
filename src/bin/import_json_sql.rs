@@ -1,24 +1,20 @@
 //! A standalone binary to import transaction data from a JSON file into PostgreSQL.
 
-use anyhow::Result;
-use evm_track::db; // Assuming evm_track is the name of your library crate
+use evm_track::db;
+use evm_track::error::{AppError, Result, DbError};
+use indicatif::{ProgressBar, ProgressStyle};
 use serde::Deserialize;
 use sqlx::PgPool;
 use std::env;
-use std::time::Duration;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio_stream::wrappers::LinesStream;
 use tokio_stream::StreamExt;
 
-use indicatif::{ProgressBar, ProgressStyle};
-
 // A simplified TxLite struct for this binary. It must match the JSON structure.
-// Note: The main library has its own TxLite, but to keep this binary decoupled,
-// we define it here. Ensure the fields match what's in null.json.
 #[derive(Debug, Clone, Deserialize)]
 pub struct TxLite {
-    pub hash: String, // Using String for simplicity here.
+    pub hash: String,
     #[serde(default)]
     pub to: Option<String>,
 }
@@ -32,10 +28,11 @@ async fn setup_table(pool: &PgPool) -> Result<()> {
             hash TEXT PRIMARY KEY,
             to_address TEXT
         )
-        "#,
+        "#
     )
     .execute(pool)
-    .await?;
+    .await
+    .map_err(|e| AppError::Db(DbError(e)))?;
     println!("Table setup complete.");
     Ok(())
 }
@@ -47,33 +44,35 @@ async fn batch_insert(pool: &PgPool, batch: &[TxLite]) -> Result<()> {
     }
 
     // Use QueryBuilder to construct a bulk insert query
-    let mut query_builder = sqlx::QueryBuilder::new(
-        "INSERT INTO imported_txs (hash, to_address) "
-    );
+    let mut query_builder = sqlx::QueryBuilder::new("INSERT INTO imported_txs (hash, to_address) ");
 
     query_builder.push_values(batch.iter(), |mut b, tx| {
-        b.push_bind(&tx.hash)
-         .push_bind(tx.to.as_ref());
+        b.push_bind(&tx.hash).push_bind(tx.to.as_ref());
     });
-    
+
     // Add a conflict clause to ignore duplicates
     query_builder.push(" ON CONFLICT (hash) DO NOTHING");
 
     let query = query_builder.build();
-    query.execute(pool).await?;
+    query.execute(pool).await.map_err(|e| AppError::Db(DbError::from(e)))?;
 
     Ok(())
 }
+
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // 1. Load configuration from .env file
     dotenv::dotenv().ok();
-    let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set in your .env file");
+    let db_url =
+        env::var("DATABASE_URL").map_err(|_| AppError::Config("DATABASE_URL must be set".to_string()))?;
     let input_file_path = "data/null.json";
     const BATCH_SIZE: usize = 1000;
 
-    println!("Starting import from '{}' to PostgreSQL...", input_file_path);
+    println!(
+        "Starting import from '{}' to PostgreSQL...",
+        input_file_path
+    );
 
     // 2. Connect to the database
     let db = db::connect(&db_url).await?;
@@ -88,8 +87,6 @@ async fn main() -> Result<()> {
     let mut lines_stream = LinesStream::new(reader.lines());
 
     // Count total lines for the progress bar
-    // This is a bit slow for very large files, but necessary for a good progress bar.
-    // For multi-gigabyte files, a spinner might be a better UX.
     println!("Counting total lines in file for progress bar...");
     let mut line_count = 0u64;
     let mut stream = LinesStream::new(BufReader::new(File::open(input_file_path).await?).lines());
@@ -100,9 +97,12 @@ async fn main() -> Result<()> {
     println!("Found {} lines to import.", total_lines);
 
     let pb = ProgressBar::new(total_lines as u64);
-    pb.set_style(ProgressStyle::default_bar()
-        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")?
-        .progress_chars("##-"));
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+            .unwrap()
+            .progress_chars("##-"),
+    );
 
     let mut batch = Vec::with_capacity(BATCH_SIZE);
     let mut count = 0;
@@ -119,7 +119,10 @@ async fn main() -> Result<()> {
                 }
             }
             Err(e) => {
-                eprintln!("Warning: Failed to parse line, skipping. Error: {}, Line: {}", e, line);
+                eprintln!(
+                    "Warning: Failed to parse line, skipping. Error: {}, Line: {}",
+                    e, line
+                );
             }
         }
         count += 1;

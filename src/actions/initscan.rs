@@ -1,9 +1,11 @@
+use base64::Engine;
 use std::{collections::HashSet, fs, path::Path, sync::Arc, time::Duration};
 
 use alloy_primitives::Address;
 use alloy_provider::{Provider, RootProvider};
 use alloy_transport::BoxTransport;
-use anyhow::{Context, Result};
+use crate::error::AppError;
+type Result<T> = std::result::Result<T, AppError>;
 use serde::{Deserialize, Serialize};
 
 use super::{Action, TxRecord};
@@ -174,6 +176,7 @@ impl InitscanAction {
     }
 }
 
+// Move this block outside of the impl InitscanAction
 impl Action for InitscanAction {
     fn on_tx(&self, t: &TxRecord) -> Result<()> {
         // Only react to deployments (receipt has contract address)
@@ -202,6 +205,7 @@ impl Action for InitscanAction {
     }
 }
 
+
 // Persistence types/helpers
 #[derive(Clone, Debug)]
 struct KnownInit { contract: Address, calldata: Vec<u8> }
@@ -210,16 +214,27 @@ struct KnownInit { contract: Address, calldata: Vec<u8> }
 struct KnownInitSerde { contract: String, calldata: String }
 
 fn load_known_from_file(path: &str) -> Result<Vec<KnownInit>> {
-    if !Path::new(path).exists() { return Ok(vec![]); }
-    let s = fs::read_to_string(path).context("read known file")?;
-    if s.trim().is_empty() { return Ok(vec![]); }
-    let arr: Vec<KnownInitSerde> = serde_json::from_str(&s).context("parse known JSON")?;
+    if !Path::new(path).exists() {
+        return Ok(vec![]);
+    }
+    let s = fs::read_to_string(path)?;
+    if s.trim().is_empty() {
+        return Ok(vec![]);
+    }
+    let arr: Vec<KnownInitSerde> = serde_json::from_str(&s)?;
     let mut out = vec![];
     for it in arr.into_iter() {
-        let contract: Address = it.contract.parse().context("parse known.contract")?;
+        let contract: Address = it
+            .contract
+            .parse()
+            .map_err(|e| AppError::General(format!("failed to parse address: {}", e)))?;
         let data = if let Ok(b) = hex::decode(it.calldata.trim_start_matches("0x")) {
             b
-        } else if let Ok(b) = base64::decode(&it.calldata) { b } else { vec![] };
+        } else if let Ok(b) = base64::engine::general_purpose::STANDARD.decode(&it.calldata) {
+            b
+        } else {
+            vec![]
+        };
         out.push(KnownInit { contract, calldata: data });
     }
     Ok(out)
@@ -230,8 +245,8 @@ fn save_known_to_file(path: &str, list: &Vec<KnownInit>) -> Result<()> {
         contract: format!("0x{}", hex::encode(k.contract.0)),
         calldata: format!("0x{}", hex::encode(&k.calldata)),
     }).collect();
-    let data = serde_json::to_string_pretty(&arr).context("serialize known JSON")?;
-    fs::write(path, data).context("write known file")?;
+    let data = serde_json::to_string_pretty(&arr).map_err(|e| AppError::from(e))?;
+    fs::write(path, data).map_err(|e| AppError::from(e))?;
     Ok(())
 }
 
@@ -244,7 +259,7 @@ async fn send_webhook(url: &str, content: &str) -> Result<()> {
         .json(&Payload { content })
         .send()
         .await
-        .context("post webhook")?;
+        .map_err(|e| AppError::from(e))?;
     Ok(())
 }
 
@@ -269,7 +284,7 @@ async fn eth_call_ok(
         .client()
         .request("eth_call", serde_json::json!([call, block]))
         .await
-        .context("eth_call")?;
+        .map_err(|e| AppError::from(e))?;
     Ok(true)
 }
 
@@ -308,14 +323,14 @@ async fn trace_call(
         .client()
         .request("trace_call", params)
         .await
-        .context("trace_call")?;
+        .map_err(|e| AppError::from(e))?;
     // Some clients wrap response; try direct deserialize
     let r: TraceCallResult = serde_json::from_value(v.clone())
         .or_else(|_| {
             // Some nodes return {result: {...}}
             serde_json::from_value(v.get("result").cloned().unwrap_or(serde_json::Value::Null))
         })
-        .context("parse trace_call result")?;
+        .map_err(|e| AppError::from(e))?;
     Ok(r)
 }
 

@@ -1,12 +1,12 @@
-use std::sync::Arc;
-
-use alloy_primitives::{Address, B256, keccak256};
+use crate::error::Result;
+use crate::throttle;
+use alloy_primitives::{keccak256, Address, B256};
 use alloy_provider::{Provider, RootProvider};
 use alloy_transport::BoxTransport;
-use crate::throttle;
+use serde::Serialize;
+use std::sync::Arc;
 
 use super::{Action, TxRecord};
-use serde::Serialize;
 
 #[derive(Clone, Default)]
 pub struct DeploymentOptions {
@@ -25,7 +25,7 @@ impl DeploymentScanAction {
 }
 
 impl Action for DeploymentScanAction {
-    fn on_tx(&self, t: &TxRecord) -> anyhow::Result<()> {
+    fn on_tx(&self, t: &TxRecord) -> Result<()> {
         if let Some(addr) = t.contract_address {
             let provider = self.provider.clone();
             let opts = self.opts.clone();
@@ -57,10 +57,10 @@ async fn scan_code(
     provider: Arc<RootProvider<BoxTransport>>,
     addr: Address,
     opts: &DeploymentOptions,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     // Fetch runtime bytecode
     throttle::acquire().await;
-    let code = provider.get_code_at(addr).await?; // Bytes
+    let code = provider.get_code_at(addr).await?;
     let len = code.len();
     let hash: B256 = keccak256(&code);
     let head = if len >= 16 { &code[..16] } else { &code[..] };
@@ -68,8 +68,14 @@ async fn scan_code(
     // Heuristics
     let is_empty = len == 0;
     let (is_min_proxy, impl_addr) = detect_eip1167_minimal_proxy(&code);
-    let eip1967_impl_ref = contains_slice(&code, &hex::decode("360894A13BA1A3210667C828492DB98DCA3E2076CC3735A920A3CA505D382BBC").unwrap());
-    let eip1967_admin_ref = contains_slice(&code, &hex::decode("b53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103").unwrap());
+    let eip1967_impl_ref = contains_slice(
+        &code,
+        &hex::decode("360894A13BA1A3210667C828492DB98DCA3E2076CC3735A920A3CA505D382BBC")?,
+    );
+    let eip1967_admin_ref = contains_slice(
+        &code,
+        &hex::decode("b53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103")?,
+    );
 
     println!(
         "[deploy-scan] contract={} code_size={} code_keccak=0x{} head=0x{} empty={} min_proxy={} impl_addr={:?} eip1967_impl_ref={} eip1967_admin_ref={}",

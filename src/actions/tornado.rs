@@ -2,6 +2,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 
 use super::{Action, EventRecord};
+use crate::error::AppError;
 
 // Minimal TornadoCash-like detector with optional file output
 #[derive(Clone, Default)]
@@ -20,7 +21,7 @@ impl TornadoAction {
 }
 
 impl Action for TornadoAction {
-    fn on_event(&self, e: &EventRecord) -> anyhow::Result<()> {
+    fn on_event(&self, e: &EventRecord) -> Result<(), AppError> {
         if let Some(name) = &e.name {
             match name.as_str() {
                 "Deposit" | "Deposited" => {

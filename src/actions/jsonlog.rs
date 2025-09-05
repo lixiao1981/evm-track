@@ -1,4 +1,5 @@
 use super::{Action, BlockRecord, EventRecord, TxRecord};
+use crate::error::Result;
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -69,10 +70,7 @@ fn value_to_string(v: &crate::abi::DecodedValue) -> String {
         String(s) => s.clone(),
         Array(arr) => format!(
             "[{}]",
-            arr.iter()
-                .map(value_to_string)
-                .collect::<Vec<_>>()
-                .join(",")
+            arr.iter().map(value_to_string).collect::<Vec<_>>().join(",")
         ),
         Unsupported(s) => format!("<unsupported:{}>", s),
     }
@@ -81,12 +79,8 @@ fn value_to_string(v: &crate::abi::DecodedValue) -> String {
 pub struct JsonLogAction;
 
 impl Action for JsonLogAction {
-    fn on_event(&self, e: &EventRecord) -> anyhow::Result<()> {
-        let fields = e
-            .fields
-            .iter()
-            .map(|f| (f.name.clone(), value_to_string(&f.value)))
-            .collect();
+    fn on_event(&self, e: &EventRecord) -> Result<()> {
+        let fields = e.fields.iter().map(|f| (f.name.clone(), value_to_string(&f.value))).collect();
         let j = JsonEvent {
             kind: "event",
             address: format!("0x{}", hex::encode(e.address.0)),
@@ -98,18 +92,14 @@ impl Action for JsonLogAction {
             fields,
             tx_index: e.tx_index,
             log_index: e.log_index,
-            topics: e
-                .topics
-                .iter()
-                .map(|t| format!("0x{}", hex::encode(t)))
-                .collect(),
+            topics: e.topics.iter().map(|t| format!("0x{}", hex::encode(t))).collect(),
             removed: e.removed,
         };
         println!("{}", serde_json::to_string(&j)?);
         Ok(())
     }
 
-    fn on_tx(&self, t: &TxRecord) -> anyhow::Result<()> {
+    fn on_tx(&self, t: &TxRecord) -> Result<()> {
         let j = JsonTx {
             kind: "tx",
             hash: format!("0x{}", hex::encode(t.hash)),
@@ -130,18 +120,12 @@ impl Action for JsonLogAction {
             cumulative_gas_used: t.cumulative_gas_used,
             block_number: t.block_number,
             tx_index: t.tx_index,
-            contract_address: t
-                .contract_address
-                .map(|a| format!("0x{}", hex::encode(a.0))),
+            contract_address: t.contract_address.map(|a| format!("0x{}", hex::encode(a.0))),
             receipt_logs: t.receipt_logs.as_ref().map(|logs| {
                 logs.iter()
                     .map(|l| JsonReceiptLog {
                         address: format!("0x{}", hex::encode(l.address.0)),
-                        topics: l
-                            .topics
-                            .iter()
-                            .map(|tp| format!("0x{}", hex::encode(tp)))
-                            .collect(),
+                        topics: l.topics.iter().map(|tp| format!("0x{}", hex::encode(tp))).collect(),
                         data: format!("0x{}", hex::encode(&l.data)),
                         log_index: l.log_index,
                         removed: l.removed,
@@ -153,7 +137,7 @@ impl Action for JsonLogAction {
         Ok(())
     }
 
-    fn on_block(&self, b: &BlockRecord) -> anyhow::Result<()> {
+    fn on_block(&self, b: &BlockRecord) -> Result<()> {
         let j = JsonBlock {
             kind: "block",
             number: b.number,

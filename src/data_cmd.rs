@@ -1,22 +1,20 @@
-use std::fs;
-use std::path::Path;
-
+use crate::error::Result;
 use alloy_json_abi::{AbiItem, Event};
-use alloy_primitives::{B256, hex, keccak256};
-use anyhow::{Context, Result};
+use alloy_primitives::{hex, keccak256, B256};
 use reqwest::Client;
 use serde_json::json;
+use std::fs;
+use std::path::Path;
 
 // Merge event signatures from an ABI file into an output JSON map.
 // Format: { "0x<topic0>": { name, sig, abi } }
 pub fn add_events_from_abi<P: AsRef<Path>>(abi_path: P, output_path: P) -> Result<()> {
-    let abi_text = fs::read_to_string(&abi_path).with_context(|| "reading ABI file")?;
-    let items: Vec<AbiItem<'_>> =
-        serde_json::from_str(&abi_text).with_context(|| "parsing ABI JSON")?;
+    let abi_text = fs::read_to_string(&abi_path)?;
+    let items: Vec<AbiItem<'_>> = serde_json::from_str(&abi_text)?;
 
     // Load existing map if present
     let mut out_map: serde_json::Map<String, serde_json::Value> = if output_path.as_ref().exists() {
-        let s = fs::read_to_string(&output_path).with_context(|| "reading output JSON")?;
+        let s = fs::read_to_string(&output_path)?;
         serde_json::from_str(&s).unwrap_or_default()
     } else {
         serde_json::Map::new()
@@ -29,11 +27,7 @@ pub fn add_events_from_abi<P: AsRef<Path>>(abi_path: P, output_path: P) -> Resul
             let sig = format!(
                 "{}({})",
                 ev.name,
-                ev.inputs
-                    .iter()
-                    .map(|p| p.ty.as_str())
-                    .collect::<Vec<_>>()
-                    .join(",")
+                ev.inputs.iter().map(|p| p.ty.as_str()).collect::<Vec<_>>().join(",")
             );
             let topic0: B256 = keccak256(sig.as_bytes());
             let key = format!("0x{}", hex::encode(topic0));
@@ -51,7 +45,7 @@ pub fn add_events_from_abi<P: AsRef<Path>>(abi_path: P, output_path: P) -> Resul
     if let Some(parent) = output_path.as_ref().parent() {
         fs::create_dir_all(parent).ok();
     }
-    fs::write(&output_path, pretty).with_context(|| "writing output JSON")?;
+    fs::write(&output_path, pretty)?;
     Ok(())
 }
 
@@ -71,11 +65,7 @@ pub async fn fetch_abi_from_scanner(
         }
     }
     let cli = Client::new();
-    let resp = cli
-        .get(url)
-        .send()
-        .await
-        .context("sending scanner request")?;
-    let text = resp.text().await.context("reading scanner response")?;
+    let resp = cli.get(url).send().await?;
+    let text = resp.text().await?;
     Ok(text)
 }

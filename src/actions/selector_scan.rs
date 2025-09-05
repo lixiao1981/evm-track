@@ -1,4 +1,5 @@
 use super::{Action, TxRecord};
+use crate::error::Result;
 use alloy_primitives::hex;
 
 #[derive(Clone)]
@@ -12,11 +13,13 @@ pub struct SelectorScanAction {
 }
 
 impl SelectorScanAction {
-    pub fn new(opts: SelectorScanOptions) -> Self { Self { opts } }
+    pub fn new(opts: SelectorScanOptions) -> Self {
+        Self { opts }
+    }
 }
 
 impl Action for SelectorScanAction {
-    fn on_tx(&self, t: &TxRecord) -> anyhow::Result<()> {
+    fn on_tx(&self, t: &TxRecord) -> Result<()> {
         if let Some(sel) = t.input_selector {
             if sel == self.opts.selector {
                 println!(
