@@ -77,7 +77,8 @@ pub async fn run(cli: &cli::Cli, cmd: &cli::InitScanCmd) -> Result<()> {
     let o = &ac.options;
     let from = o.get("from-address").and_then(|v| v.as_str()).and_then(|s| s.parse().ok());
     if cli.verbose {
-    
+        // You can add debug print here if needed
+    }
         
     let mut check_addrs: Vec<alloy_primitives::Address> = vec![];
     if let Some(arr) = o.get("check-addresses").and_then(|v| v.as_array()) {

@@ -2,14 +2,17 @@
   "rpcurl": "wss://api.zan.top/node/ws/v1/bsc/mainnet/f18c4eee92c34af6a03d287a48d3fdf7",
   "max-requests-per-second": 10,
   "actions": {
-    "Logging": { "enabled": false },
+    "Logging": {
+      "enabled": true,
+      "options": { "enable-terminal-logs": true, "log-events": false }
+    },
     "LargeTransfer": {
       "enabled": true,
       "addresses": {
         "0x55d398326f99059fF775485246999027B3197955": "USDT"
       },
       "options": {
-        "min-amount": "100000",
+        "min-amount": "10000",
         "decimals-default": 18
       }
     }

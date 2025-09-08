@@ -68,7 +68,6 @@ async fn run_events_subscribe(
                 topics: v.topics().to_vec(),
                 removed: Some(v.removed),
             };
-            // Removed raw event println to suppress noise; actions will decide what to output.
             if let Some(a) = &actions {
                 a.on_event(&rec);
             }
