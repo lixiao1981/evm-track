@@ -48,32 +48,11 @@ impl LoggingAction {
 }
 
 impl Action for LoggingAction {
-    fn on_event(&self, e: &EventRecord) -> Result<()> {
-        if self.opts.enable_terminal_logs && self.opts.log_events {
-            println!(
-                "[event] block={:?} addr={:?} tx={:?} name={:?}",
-                e.block_number, e.address, e.tx_hash, e.name
-            );
-            if e.name.is_none() {
-                println!("  [decode] unknown_topic0 (未匹配到事件签名)");
-            }
-            for f in &e.fields {
-                println!("  {} = {:?}", f.name, f.value);
-            }
-        }
+    fn on_event(&self, _e: &EventRecord) -> Result<()> {
+    // Suppressed event terminal logging
+    // if self.opts.enable_terminal_logs && self.opts.log_events { ... }
         if self.opts.enable_discord_logs && self.opts.log_events {
-            if let (Some(client), Some(url)) = (&self.http, &self.opts.discord_webhook_url) {
-                let s = format!(
-                    "[event] block={:?} addr={:?} tx={:?} name={:?}",
-                    e.block_number, e.address, e.tx_hash, e.name
-                );
-                let client = client.clone();
-                let url = url.clone();
-                tokio::spawn(async move {
-                    let payload = DiscordMessage { content: s };
-                    let _ = client.post(&url).json(&payload).send().await;
-                });
-            }
+            // Suppressed discord event logging
         }
         Ok(())
     }

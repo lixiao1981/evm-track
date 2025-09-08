@@ -35,8 +35,6 @@ pub enum Commands {
     Data(DataCmd),
     /// Run historical init-scan over a block range
     InitScan(InitScanCmd),
-    /// Filter transactions by 4-byte selector over a block range
-    SelScan(SelScanCmd),
     /// Scan transactions from null.json and get their traces
     HistoryTxScan(HistoryTxScanCmd),
 }
@@ -164,28 +162,6 @@ pub struct InitScanCmd {
     /// 并发数量
     #[arg(long, default_value_t = 10)]
     pub concurrency: usize,
-}
-
-#[derive(Debug, Args)]
-pub struct SelScanCmd {
-    /// 配置路径（用于指定 RPC 等）
-    #[arg(long)]
-    pub config: Option<PathBuf>,
-    /// 起始区块（包含）
-    #[arg(long)]
-    pub from_block: u64,
-    /// 结束区块（包含）
-    #[arg(long)]
-    pub to_block: u64,
-    /// 选择器（0x 开头 8 hex）例如 0xe1c7392a
-    #[arg(long)]
-    pub selector: String,
-    /// 步长（默认 10000）
-    #[arg(long, default_value_t = 10_000)]
-    pub step_blocks: u64,
-    /// 打印回执摘要
-    #[arg(long, default_value_t = false)]
-    pub print_receipts: bool,
 }
 
 #[derive(Debug, Args)]

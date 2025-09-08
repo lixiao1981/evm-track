@@ -36,20 +36,40 @@ fn logging_cfg<'a>(cli: &Cli, cfg: &'a Config) -> (bool, bool, bool, bool, bool,
 }
 
 fn add_common_actions(set: &mut ActionSet, prov_arc: Arc<RootProvider<BoxTransport>>, cli: &Cli, cfg: &Config) {
-    let (log_events, log_txs, log_blocks, enable_term, enable_disc, disc_url) = logging_cfg(cli, cfg);
-    let log_opts = actions::logging::LoggingOptions {
-        enable_terminal_logs: enable_term,
-        enable_discord_logs: enable_disc,
-        discord_webhook_url: disc_url.clone(),
-        log_events,
-        log_transactions: log_txs,
-        log_blocks,
-    };
-    set.add(actions::logging::LoggingAction::new(log_opts));
+    // LoggingAction: now respect optional "Logging".enabled flag (default true)
+    let logging_enabled = cfg
+        .actions
+        .get("Logging")
+        .map(|ac| ac.enabled)
+        .unwrap_or(true);
+    if logging_enabled {
+        let (log_events, log_txs, log_blocks, enable_term, enable_disc, disc_url) = logging_cfg(cli, cfg);
+        let log_opts = actions::logging::LoggingOptions {
+            enable_terminal_logs: enable_term,
+            enable_discord_logs: enable_disc,
+            discord_webhook_url: disc_url.clone(),
+            log_events,
+            log_transactions: log_txs,
+            log_blocks,
+        };
+        set.add(actions::logging::LoggingAction::new(log_opts));
+    }
     if cli.json {
         set.add(actions::jsonlog::JsonLogAction);
     }
-    set.add(actions::transfer::TransferAction::new(prov_arc.clone()));
+    // --- TransferAction disabled (commented out) ---
+    // 原来这里无条件 / 或默认根据配置启用 TransferAction，会打印所有 Transfer 日志。
+    // 现在按你的需求注释掉，防止出现小额 [transfer] 噪声。
+    // 如果以后需要恢复，只需取消下面整段注释。
+    // if cfg
+    //     .actions
+    //     .get("Transfer")
+    //     .map(|ac| ac.enabled)
+    //     .unwrap_or(true)
+    // {
+    //     set.add(actions::transfer::TransferAction::new(prov_arc.clone()));
+    // }
+    // --- end TransferAction disabled ---
     set.add(actions::ownership::OwnershipAction);
     set.add(actions::proxy::ProxyUpgradeAction::new(prov_arc.clone()));
     // Deployment output to file if configured

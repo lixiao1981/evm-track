@@ -1,6 +1,6 @@
 use super::{Action, EventRecord};
 use crate::error::Result;
-use alloy_primitives::U256;
+use alloy_primitives::{Address, U256};
 
 #[derive(Clone, Default)]
 pub struct LargeTransferOptions {
@@ -15,6 +15,45 @@ pub struct LargeTransferAction {
 impl LargeTransferAction {
     pub fn new(opts: LargeTransferOptions) -> Self {
         Self { opts }
+    }
+    
+    /// 根据合约地址获取正确的代币精度
+    fn get_token_decimals(&self, address: &Address) -> u8 {
+        let formatted_addr = format!("{:#x}", address).to_lowercase();
+        
+        // 使用BSC主网上已知代币的精度
+        let decimals = match formatted_addr.as_str() {
+            // NOTE: USDT on BSC uses 18 decimals (align with on-chain contract response)
+            "0x55d398326f99059ff775485246999027b3197955" => 18,  // USDT
+            "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d" => 6,  // USDC  
+            "0xe9e7cea3dedca5984780bafc599bd69add087d56" => 18, // BUSD
+            "0x2170ed0880ac9a755fd29b2688956bd959f933f8" => 18, // ETH
+            "0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c" => 18, // BTCB
+            "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c" => 18, // WBNB
+            _ => self.opts.decimals_default,
+        };
+        
+        decimals
+    }
+    
+    /// 格式化数值为人类可读格式
+    fn format_amount(&self, amount: U256, decimals: u8) -> String {
+        let divisor = pow10_u256(decimals as usize);
+        let integer_part = amount / divisor;
+        let fractional_part = amount % divisor;
+        
+        if fractional_part == U256::ZERO {
+            integer_part.to_string()
+        } else {
+            // 格式化小数部分，去除尾随零
+            let frac_str = format!("{:0width$}", fractional_part, width = decimals as usize);
+            let frac_trimmed = frac_str.trim_end_matches('0');
+            if frac_trimmed.is_empty() {
+                integer_part.to_string()
+            } else {
+                format!("{}.{}", integer_part, frac_trimmed)
+            }
+        }
     }
 }
 
@@ -54,28 +93,57 @@ fn parse_human_to_u256(s: &str, decimals: u8) -> Option<U256> {
 }
 
 impl Action for LargeTransferAction {
-    fn on_event(&self, e: &EventRecord) -> Result<()> {
-        if e.name.as_deref() == Some("Transfer") {
-            let mut amount_u256: Option<U256> = None;
-            for f in &e.fields {
-                if matches!(f.name.as_str(), "value" | "amount") {
-                    if let crate::abi::DecodedValue::Uint(u) = &f.value {
-                        amount_u256 = Some(*u);
+    fn on_event(&self, record: &EventRecord) -> Result<()> {        
+        // 检查是否为 Transfer 事件
+        if record.topics.len() >= 3 {
+            let transfer_sig = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+            let actual_topic = record.topics[0].to_string();
+            if actual_topic == transfer_sig {
+                
+                // 从字段中提取 Transfer 金额 (value 是第三个字段，索引为2)
+                let amount = if let Some(field) = record.fields.get(2) {
+                    match &field.value {
+                        crate::abi::DecodedValue::Uint(val) => *val,
+                        _ => return Ok(()),
+                    }
+                } else {
+                    return Ok(());
+                };
+                
+                // 获取正确的代币精度
+                let decimals = self.get_token_decimals(&record.address);
+                
+                // 如果设置了最小金额阈值，检查是否超过阈值
+                if let Some(min_amount_str) = &self.opts.min_amount_human {
+                    if let Some(min_amount) = parse_human_to_u256(min_amount_str, decimals) {
+                        if amount < min_amount {
+                            return Ok(());
+                        }
+                    } else {
+                        return Ok(());
                     }
                 }
-            }
-            if let (Some(min_h), Some(amount)) = (&self.opts.min_amount_human, amount_u256) {
-                let threshold =
-                    parse_human_to_u256(min_h, self.opts.decimals_default).unwrap_or(U256::ZERO);
-                if amount >= threshold {
-                    println!(
-                        "[alert-large-transfer] contract={} value_raw={} threshold(human)={} (dec={})",
-                        e.address,
-                        amount,
-                        min_h,
-                        self.opts.decimals_default
-                    );
+
+                // 异常数值检测（例如远超常规供应量的可疑转账）: 默认 > 1e13 直接标记异常并忽略
+                // 1e13 以人类单位（decimals 之后）表示，这里转换成整数判断
+                if let Some(anomaly_threshold) = parse_human_to_u256("10000000000000", decimals) { // 10,000,000,000,000
+                    if amount > anomaly_threshold {
+                        let formatted_amount = self.format_amount(amount, decimals);
+                        println!("ANOMALY Large Transfer (ignored): {} tokens at {:?} (decimals: {})", 
+                            formatted_amount, record.address, decimals);
+                        println!("  Block: {}, Tx: {:?}", 
+                            record.block_number.unwrap_or(0), record.tx_hash);
+                        return Ok(());
+                    }
                 }
+                
+                // 格式化金额显示
+                let formatted_amount = self.format_amount(amount, decimals);
+                
+                println!("Large Transfer: {} tokens at {:?} (decimals: {})", 
+                    formatted_amount, record.address, decimals);
+                println!("  Block: {}, Tx: {:?}", 
+                    record.block_number.unwrap_or(0), record.tx_hash);
             }
         }
         Ok(())

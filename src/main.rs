@@ -4,7 +4,7 @@ use tracing_subscriber::EnvFilter;
 
 use evm_track::actions::history_tx_scan;
 use evm_track::cli::{Cli, Commands, DataWhichCmd};
-use evm_track::commands::{init_scan_cmd, sel_scan_cmd, track};
+use evm_track::commands::{init_scan_cmd, track};
 use evm_track::config;
 use evm_track::data_cmd;
 use evm_track::error::{AppError, Result};
@@ -42,7 +42,6 @@ async fn main() -> Result<()> {
             }
         },
         Commands::InitScan(cmd) => init_scan_cmd::run(&cli, cmd).await,
-        Commands::SelScan(cmd) => sel_scan_cmd::run(&cli, cmd).await,
         Commands::HistoryTxScan(cmd) => {
             let cfg_path = cmd.config.as_ref().ok_or_else(|| {
                 AppError::Config("--config is required for history-tx-scan".to_string())

@@ -1,5 +1,5 @@
 {
-  "rpcurl": "ws://192.168.2.58:8646",
+  "rpcurl": "ws://192.168.80.1:8646",
   "max-requests-per-second": 0,
   "actions": {
     "Logging": {
@@ -39,7 +39,8 @@
         },
         "webhook-url": "",
         "initializable-contracts-filepath": "./data/eth_initializable_contracts.json",
-        "init-known-contracts-frequency": 86400
+        "init-known-contracts-frequency": 86400,
+        "debug": true
       }
     }
   }
