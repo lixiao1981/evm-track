@@ -1,0 +1,42 @@
+{
+  "rpcurl": "ws://192.168.80.1:8546",
+  "max-requests-per-second": 5,
+  "actions": {
+    "Logging": {
+      "enabled": true,
+      "options": {
+        "log-events": false,
+        "log-transactions": false,
+        "log-blocks": true,
+        "enable-terminal-logs": true
+      }
+    },
+    "Initscan": {
+      "enabled": true,
+      "addresses": {},
+      "options": {
+        "from-address": null,
+        "check-addresses": [],
+        "init-after-delay": 2,
+        "init-concurrency": 6,
+        "debug": false,
+        "function-signature-calldata": {
+          "initialize()": "0x8129fc1c",
+          "init()": "0xe1c7392a",
+          "upgradeTo(address)": "0x3659cfe6"
+        },
+        "initializable-contracts-filepath": "./data/eth_initializable_contracts.json",
+        "init-known-contracts-frequency": 43200,
+        "alert-usd-threshold": 10000,
+        "webhook-url": null
+      }
+    }
+  },
+  "evm-track": {
+    "init-scan": {
+      "from": 94106,
+      "to": 94106,
+      "config": "./init_scan.demo.toml"
+    }
+  }
+}

@@ -8,7 +8,7 @@ use futures::stream::{self, StreamExt};
 use serde::Deserialize;
 use tracing::{info, warn};
 
-use crate::provider::public_provider_get_receipt;
+//use crate::provider::public_provider_get_receipt;
 
 use super::initscan::{InitscanAction, InitscanOptions};
 use std::io::Write;
@@ -97,6 +97,10 @@ pub async fn run(
 
                     for tx in b.transactions {
                         if tx.to.is_none() {
+                            // 如果是目标hash，输出到控制台
+                            if format!("0x{:x}", tx.hash) == "0x34deb918f0c0cfecad8c5bee2b53d6f0da8c7bdc50ee700bcba5b574cd9298a8" {
+                                println!("[initscan][match] 合约创建tx: {}", format!("0x{:x}", tx.hash));
+                            }
                             // Action 1: Log the transaction to a file, with robust error handling.
                             match serde_json::to_string(&tx) {
                                 Ok(json_string) => {
