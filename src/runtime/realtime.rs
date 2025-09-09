@@ -3,10 +3,11 @@ use crate::throttle;
 use crate::error::Result;
 use crate::{
     abi,
-    actions::{ActionSet, BlockRecord, EventRecord, TxRecord},
+    actions::{ActionSet, BlockRecord, TxRecord},
 };
+use super::{cache, public};
 use alloy_network_primitives::TransactionResponse;
-use alloy_primitives::{hex, Address, B256};
+use alloy_primitives::Address;
 use alloy_provider::{Provider, RootProvider};
 use alloy_rpc_types_eth::Filter;
 use alloy_rpc_types_eth::TransactionTrait;
@@ -14,6 +15,8 @@ use alloy_transport::BoxTransport;
 use futures::StreamExt;
 use std::{sync::Arc, time::Duration};
 use tracing::{info, warn};
+
+
 
 pub async fn run_events(
     provider: RootProvider<BoxTransport>,
@@ -47,30 +50,7 @@ async fn run_events_subscribe(
         let sub = provider.subscribe_logs(&filter).await?;
         let mut stream = sub.into_stream();
         while let Some(v) = stream.next().await {
-            let topic0 = v.topic0().cloned().unwrap_or(B256::ZERO);
-            let topic0_hex = format!("0x{}", hex::encode(topic0));
-            let (name, fields) = if let Some((n, f)) =
-                abi::try_decode_event(&topic0_hex, v.topics(), v.data().data.as_ref(), &events)
-            {
-                (Some(n), f)
-            } else {
-                (None, vec![])
-            };
-            let rec = EventRecord {
-                address: v.address(),
-                tx_hash: v.transaction_hash,
-                block_number: v.block_number,
-                topic0: v.topic0().cloned(),
-                name,
-                fields,
-                tx_index: v.transaction_index,
-                log_index: v.log_index,
-                topics: v.topics().to_vec(),
-                removed: Some(v.removed),
-            };
-            if let Some(a) = &actions {
-                a.on_event(&rec);
-            }
+            let rec = public::process_log(&v, &events, &actions);
             last_seen = rec.block_number.unwrap_or(last_seen);
         }
         warn!("log subscription ended; attempting backfill and resubscribe");
@@ -113,30 +93,7 @@ async fn run_events_poll(
             throttle::acquire().await;
             let logs = provider.get_logs(&filter).await?;
             for v in logs {
-                let topic0 = v.topic0().cloned().unwrap_or(B256::ZERO);
-                let topic0_hex = format!("0x{}", hex::encode(topic0));
-                let (name, fields) = if let Some((n, f)) =
-                    abi::try_decode_event(&topic0_hex, v.topics(), v.data().data.as_ref(), &events)
-                {
-                    (Some(n), f)
-                } else {
-                    (None, vec![])
-                };
-                let rec = EventRecord {
-                    address: v.address(),
-                    tx_hash: v.transaction_hash,
-                    block_number: v.block_number,
-                    topic0: v.topic0().cloned(),
-                    name,
-                    fields,
-                    tx_index: v.transaction_index,
-                    log_index: v.log_index,
-                    topics: v.topics().to_vec(),
-                    removed: Some(v.removed),
-                };
-                if let Some(a) = &actions {
-                    a.on_event(&rec);
-                }
+                public::process_log(&v, &events, &actions);
             }
             last = cur;
         }
@@ -155,6 +112,92 @@ pub async fn run_blocks(
             warn!("subscribe newHeads failed: {e}; fallback to polling");
             run_blocks_poll(provider, addrs, actions).await
         }
+    }
+}
+
+pub async fn run_contract_deployments(
+    provider: RootProvider<BoxTransport>,
+    actions: Option<Arc<ActionSet>>,
+) -> Result<()> {
+    info!("Starting contract deployment monitoring...");
+    let mut last_seen = provider.get_block_number().await?;
+    let mut backoff = 1u64;
+    const MAX_BACKOFF: u64 = 30;
+    
+    loop {
+        match run_deployments_subscribe(provider.clone(), actions.clone(), last_seen).await {
+            Ok(new_last_seen) => {
+                last_seen = new_last_seen;
+                backoff = 1; // 重置退避
+            }
+            Err(e) => {
+                warn!("deployment subscription failed: {e}; fallback to polling");
+                last_seen = run_deployments_poll(provider.clone(), actions.clone(), last_seen).await?;
+                backoff = 1;
+            }
+        }
+        
+        tokio::time::sleep(Duration::from_secs(backoff)).await;
+        backoff = (backoff * 2).min(MAX_BACKOFF);
+    }
+}
+
+async fn run_deployments_subscribe(
+    provider: RootProvider<BoxTransport>,
+    actions: Option<Arc<ActionSet>>,
+    mut last_seen: u64,
+) -> Result<u64> {
+    let sub = provider.subscribe_blocks().await?;
+    let mut stream = sub.into_stream();
+    
+    while let Some(header) = stream.next().await {
+        let n = header.number;
+        
+        // 使用统一的缓存处理函数
+        if let Err(e) = cache::process_block_unified(
+            &provider,
+            n,
+            &[], // 不需要监控特定地址的事件
+            &actions,
+            false, // process_events
+            true,  // process_deployments
+        ).await {
+            warn!("Error processing deployments for block {}: {}", n, e);
+        }
+        
+        last_seen = n;
+    }
+    
+    Ok(last_seen)
+}
+
+async fn run_deployments_poll(
+    provider: RootProvider<BoxTransport>,
+    actions: Option<Arc<ActionSet>>,
+    mut last_seen: u64,
+) -> Result<u64> {
+    loop {
+        throttle::acquire().await;
+        let cur = provider.get_block_number().await?;
+        
+        if cur > last_seen {
+            for n in (last_seen + 1)..=cur {
+                // 使用统一的缓存处理函数
+                if let Err(e) = cache::process_block_unified(
+                    &provider,
+                    n,
+                    &[], // 不需要监控特定地址的事件
+                    &actions,
+                    false, // process_events
+                    true,  // process_deployments
+                ).await {
+                    warn!("Error processing deployments for block {}: {}", n, e);
+                }
+            }
+            last_seen = cur;
+        }
+        
+        tokio::time::sleep(Duration::from_secs(2)).await;
     }
 }
 
@@ -183,25 +226,12 @@ pub async fn run_pending_transactions(
                     }
                 }
                 let input = tx.input().as_ref();
-                let (fname, args) = if input.len() >= 4 {
-                    let sel_hex = format!("0x{}", hex::encode(&input[0..4]));
-                    if let Some((f, a)) = abi::try_decode_function(&sel_hex, input, &funcs) {
-                        (Some(f), a)
-                    } else {
-                        (None, vec![])
-                    }
-                } else {
-                    (None, vec![])
-                };
+                let (fname, args, input_selector) = public::decode_transaction_function(input, &funcs);
                 let tr = TxRecord {
                     hash: tx.tx_hash(),
                     from: Some(tx.from()),
                     to: to_addr,
-                    input_selector: if input.len() >= 4 {
-                        input[0..4].try_into().ok()
-                    } else {
-                        None
-                    },
+                    input_selector,
                     func_name: fname,
                     func_args: args,
                     gas: Some(tx.gas_limit()),
@@ -242,25 +272,12 @@ pub async fn run_pending_transactions(
                 }
             }
             let input = tx.input().as_ref();
-            let (fname, args) = if input.len() >= 4 {
-                let sel_hex = format!("0x{}", hex::encode(&input[0..4]));
-                if let Some((f, a)) = abi::try_decode_function(&sel_hex, input, &funcs) {
-                    (Some(f), a)
-                } else {
-                    (None, vec![])
-                }
-            } else {
-                (None, vec![])
-            };
+            let (fname, args, input_selector) = public::decode_transaction_function(input, &funcs);
             let tr = TxRecord {
                 hash: h,
                 from: Some(tx.from),
                 to: to_addr,
-                input_selector: if input.len() >= 4 {
-                    input[0..4].try_into().ok()
-                } else {
-                    None
-                },
+                input_selector,
                 func_name: fname,
                 func_args: args,
                 gas: Some(tx.gas_limit()),
@@ -289,8 +306,6 @@ async fn run_blocks_subscribe(
     actions: Option<Arc<ActionSet>>,
 ) -> Result<()> {
     info!("Subscribing to new heads via eth_subscribe");
-    let events = abi::load_event_sigs_default().unwrap_or_default();
-    let funcs = abi::load_func_sigs_default().unwrap_or_default();
     throttle::acquire().await;
     let mut last_seen = provider.get_block_number().await?;
     let mut backoff = 1u64; // seconds
@@ -302,122 +317,18 @@ async fn run_blocks_subscribe(
         let mut stream = sub.into_stream();
         while let Some(header) = stream.next().await {
             let n = header.number;
-            println!("block: number={}", n);
-            let br = BlockRecord { number: n };
-            if let Some(a) = &actions {
-                a.on_block(&br);
+            // 使用统一的缓存处理函数
+            if let Err(e) = cache::process_block_unified(
+                &provider,
+                n,
+                &addrs,
+                &actions,
+                true,  // process_events
+                false, // process_deployments (在这个函数中不处理合约创建)
+            ).await {
+                warn!("Error processing block {}: {}", n, e);
             }
-            let filter = Filter::new().address(addrs.clone()).from_block(n).to_block(n);
-            throttle::acquire().await;
-            let logs = provider.get_logs(&filter).await?;
-            for v in logs {
-                let topic0 = v.topic0().cloned().unwrap_or(B256::ZERO);
-                let topic0_hex = format!("0x{}", hex::encode(topic0));
-                let (name, fields) = if let Some((nm, fs)) =
-                    abi::try_decode_event(&topic0_hex, v.topics(), v.data().data.as_ref(), &events)
-                {
-                    (Some(nm), fs)
-                } else {
-                    (None, vec![])
-                };
-                let er = EventRecord {
-                    address: v.address(),
-                    tx_hash: v.transaction_hash,
-                    block_number: v.block_number,
-                    topic0: v.topic0().cloned(),
-                    name,
-                    fields,
-                    tx_index: v.transaction_index,
-                    log_index: v.log_index,
-                    topics: v.topics().to_vec(),
-                    removed: Some(v.removed),
-                };
-                if let Some(a) = &actions {
-                    a.on_event(&er);
-                }
 
-                if let Some(txh) = v.transaction_hash {
-                    throttle::acquire().await;
-                    if let Some(tx) = provider.get_transaction_by_hash(txh).await? {
-                        let input = tx.input().as_ref();
-                        if input.len() >= 4 {
-                            let sel = &input[0..4];
-                            let sel_hex = format!("0x{}", hex::encode(sel));
-                            let (fname, args) = if let Some((f, a)) =
-                                abi::try_decode_function(&sel_hex, input, &funcs)
-                            {
-                                (Some(f), a)
-                            } else {
-                                (None, vec![])
-                            };
-                            // fetch receipt for gas/fee info
-                            throttle::acquire().await;
-                            let receipt = provider.get_transaction_receipt(txh).await.ok().flatten();
-                            let (
-                                status,
-                                gas_used,
-                                cumulative_gas_used,
-                                effective_gas_price,
-                                block_number,
-                                tx_index,
-                                contract_address,
-                                receipt_logs,
-                            ) = if let Some(r) = &receipt {
-                                let logs_vec = Some(
-                                    r.inner
-                                        .logs()
-                                        .iter()
-                                        .map(|l| crate::actions::SimpleLog {
-                                            address: l.address(),
-                                            topics: l.topics().to_vec(),
-                                            data: l.data().data.as_ref().to_vec(),
-                                            log_index: l.log_index,
-                                            removed: None,
-                                        })
-                                        .collect(),
-                                );
-                                (
-                                    Some(if r.status() { 1 } else { 0 }),
-                                    Some(r.gas_used as u64),
-                                    Some(r.inner.cumulative_gas_used() as u64),
-                                    Some(alloy_primitives::U256::from(r.effective_gas_price)),
-                                    r.block_number,
-                                    r.transaction_index,
-                                    r.contract_address,
-                                    logs_vec,
-                                )
-                            } else {
-                                (None, None, None, None, None, None, None, None)
-                            };
-                            let tr = TxRecord {
-                                hash: txh,
-                                from: Some(tx.from),
-                                to: match tx.kind() {
-                                    alloy_primitives::TxKind::Call(a) => Some(a),
-                                    _ => None,
-                                },
-                                input_selector: sel.try_into().ok(),
-                                func_name: fname,
-                                func_args: args,
-                                gas: Some(tx.gas_limit()),
-                                gas_price: alloy_rpc_types_eth::TransactionTrait::gas_price(&tx)
-                                    .map(alloy_primitives::U256::from),
-                                effective_gas_price,
-                                status,
-                                gas_used,
-                                cumulative_gas_used,
-                                block_number,
-                                tx_index,
-                                contract_address,
-                                receipt_logs,
-                            };
-                            if let Some(a) = &actions {
-                                a.on_tx(&tr);
-                            }
-                        }
-                    }
-                }
-            }
             last_seen = n;
         }
         warn!("newHeads subscription ended; attempting backfill and resubscribe");
@@ -463,33 +374,7 @@ async fn run_blocks_poll(
                 throttle::acquire().await;
                 let logs = provider.get_logs(&filter).await?;
                 for v in logs {
-                    let topic0 = v.topic0().cloned().unwrap_or(B256::ZERO);
-                    let topic0_hex = format!("0x{}", hex::encode(topic0));
-                    let (name, fields) = if let Some((nm, fs)) = abi::try_decode_event(
-                        &topic0_hex,
-                        v.topics(),
-                        v.data().data.as_ref(),
-                        &events,
-                    ) {
-                        (Some(nm), fs)
-                    } else {
-                        (None, vec![])
-                    };
-                    let er = EventRecord {
-                        address: v.address(),
-                        tx_hash: v.transaction_hash,
-                        block_number: v.block_number,
-                        topic0: v.topic0().cloned(),
-                        name,
-                        fields,
-                        tx_index: v.transaction_index,
-                        log_index: v.log_index,
-                        topics: v.topics().to_vec(),
-                        removed: Some(v.removed),
-                    };
-                    if let Some(a) = &actions {
-                        a.on_event(&er);
-                    }
+                    public::process_log(&v, &events, &actions);
                 }
             }
             last = cur;

@@ -122,6 +122,30 @@ impl Action for LoggingAction {
         }
         Ok(())
     }
+
+    fn on_contract_creation(&self, c: &super::ContractCreationRecord) -> Result<()> {
+        if self.opts.enable_terminal_logs {
+            println!(
+                "[contract-creation] addr={} deployer={} tx={} block={} gas_used={:?}",
+                c.contract_address, c.deployer, c.tx_hash, c.block_number, c.gas_used
+            );
+        }
+        if self.opts.enable_discord_logs {
+            if let (Some(client), Some(url)) = (&self.http, &self.opts.discord_webhook_url) {
+                let s = format!(
+                    "[contract-creation] addr={} deployer={} tx={} block={}",
+                    c.contract_address, c.deployer, c.tx_hash, c.block_number
+                );
+                let client = client.clone();
+                let url = url.clone();
+                tokio::spawn(async move {
+                    let payload = DiscordMessage { content: s };
+                    let _ = client.post(&url).json(&payload).send().await;
+                });
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Serialize)]

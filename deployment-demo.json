@@ -1,0 +1,15 @@
+{
+  "rpcurl": "wss://api.zan.top/node/ws/v1/bsc/mainnet/f18c4eee92c34af6a03d287a48d3fdf7/",
+  "max-requests-per-second": 5,
+  "actions": {
+    "Logging": {
+      "enabled": true,
+      "options": {
+        "log-events": false,
+        "log-transactions": false,
+        "log-blocks": false,
+        "enable-terminal-logs": true
+      }
+    }
+  }
+}

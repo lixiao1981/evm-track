@@ -73,6 +73,9 @@ pub struct RealtimeCmd {
     /// 仅订阅待打包交易的哈希，避免某些节点 full-pending 缺字段导致的反序列化错误
     #[arg(long, default_value_t = false)]
     pub pending_hashes_only: bool,
+    /// 监控合约创建/部署
+    #[arg(long, default_value_t = false)]
+    pub deployments: bool,
 }
 
 #[derive(Debug, Args, Clone)]

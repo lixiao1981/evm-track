@@ -1,4 +1,4 @@
-use alloy_primitives::{Address, B256, hex};
+use alloy_primitives::{Address, B256};
 use alloy_provider::{Provider, RootProvider};
 use alloy_rpc_types_eth::Filter;
 use alloy_transport::BoxTransport;
@@ -8,8 +8,9 @@ use tracing::warn;
 
 use crate::{
     abi,
-    actions::{ActionSet, BlockRecord, EventRecord, TxRecord},
+    actions::{ActionSet, BlockRecord},
     cli::RangeFlags,
+    runtime::public,
 };
 use alloy_rpc_types_eth::TransactionTrait;
 use std::sync::Arc;
@@ -35,30 +36,7 @@ pub async fn run_events(
         throttle::acquire().await;
         let logs = provider.get_logs(&filter).await?;
         for v in logs {
-            let topic0 = v.topic0().cloned().unwrap_or(B256::ZERO);
-            let topic0_hex = format!("0x{}", hex::encode(topic0));
-            let (name, fields) = if let Some((nm, fs)) =
-                abi::try_decode_event(&topic0_hex, v.topics(), v.data().data.as_ref(), &events)
-            {
-                (Some(nm), fs)
-            } else {
-                (None, vec![])
-            };
-            let er = EventRecord {
-                address: v.address(),
-                tx_hash: v.transaction_hash,
-                block_number: v.block_number,
-                topic0: v.topic0().cloned(),
-                name,
-                fields,
-                tx_index: v.transaction_index,
-                log_index: v.log_index,
-                topics: v.topics().to_vec(),
-                removed: Some(v.removed),
-            };
-            if let Some(a) = &actions {
-                a.on_event(&er);
-            }
+            let _er = public::process_log(&v, &events, &actions);
         }
         cur = end.saturating_add(1);
     }
@@ -98,19 +76,23 @@ pub async fn run_blocks(
                 let tx_opt = match provider.get_transaction_by_hash(txh).await { Ok(v) => v, Err(e) => { warn!("get_transaction_by_hash {:?} error: {}; skipping tx", txh, e); None } };
                 if let Some(tx) = tx_opt {
                     let input = tx.input().as_ref();
-                    let sel_opt = if input.len() >= 4 { Some(input[0..4].try_into().ok()).flatten() } else { None };
-                    let sel_hex = sel_opt.map(|s: [u8;4]| format!("0x{}", hex::encode(s)));
-                    let (fname, args) = if let (Some(h), true) = (sel_hex.as_ref(), input.len() >= 4) {
-                        if let Some((f, a)) = abi::try_decode_function(h, input, &funcs) { (Some(f), a) } else { (None, vec![]) }
-                    } else { (None, vec![]) };
+                    let (fname, args, input_selector) = public::decode_transaction_function(input, &funcs);
                     throttle::acquire().await;
                     let receipt = provider.get_transaction_receipt(txh).await.ok().flatten();
-                    let (status, gas_used, cumulative_gas_used, effective_gas_price, block_number, tx_index, contract_address, receipt_logs) = if let Some(r) = &receipt {
-                        let logs_vec = Some(r.inner.logs().iter().map(|l| crate::actions::SimpleLog { address: l.address(), topics: l.topics().to_vec(), data: l.data().data.as_ref().to_vec(), log_index: l.log_index, removed: None }).collect());
-                        (Some(if r.status() { 1 } else { 0 }), Some(r.gas_used as u64), Some(r.inner.cumulative_gas_used() as u64), Some(alloy_primitives::U256::from(r.effective_gas_price)), r.block_number, r.transaction_index, r.contract_address, logs_vec)
-                    } else { (None, None, None, None, None, None, None, None) };
-                    let tr = TxRecord { hash: txh, from: Some(tx.from), to: match tx.kind() { alloy_primitives::TxKind::Call(a) => Some(a), _ => None }, input_selector: sel_opt, func_name: fname, func_args: args, gas: Some(tx.gas_limit()), gas_price: tx.gas_price().map(alloy_primitives::U256::from), effective_gas_price, status, gas_used, cumulative_gas_used, block_number, tx_index, contract_address, receipt_logs };
-                    if let Some(a) = &actions { a.on_tx(&tr); }
+                    
+                    // 使用公共函数创建 TxRecord
+                    let tr = public::create_tx_record_from_standard_tx(
+                        &tx, 
+                        txh, 
+                        &receipt, 
+                        fname, 
+                        args, 
+                        input_selector
+                    );
+                    
+                    if let Some(a) = &actions { 
+                        a.on_tx(&tr); 
+                    }
                 }
             }
             num = num.saturating_add(1);
@@ -136,30 +118,7 @@ pub async fn run_blocks(
             }
         };
         for v in logs {
-            let topic0 = v.topic0().cloned().unwrap_or(B256::ZERO);
-            let topic0_hex = format!("0x{}", hex::encode(topic0));
-            let (name, fields) = if let Some((nm, fs)) =
-                abi::try_decode_event(&topic0_hex, v.topics(), v.data().data.as_ref(), &events)
-            {
-                (Some(nm), fs)
-            } else {
-                (None, vec![])
-            };
-            let er = EventRecord {
-                address: v.address(),
-                tx_hash: v.transaction_hash,
-                block_number: v.block_number,
-                topic0: v.topic0().cloned(),
-                name,
-                fields,
-                tx_index: v.transaction_index,
-                log_index: v.log_index,
-                topics: v.topics().to_vec(),
-                removed: Some(v.removed),
-            };
-            if let Some(a) = &actions {
-                a.on_event(&er);
-            }
+            let _er = public::process_log(&v, &events, &actions);
             if let Some(txh) = v.transaction_hash {
                 throttle::acquire().await;
                 let tx_opt = match provider.get_transaction_by_hash(txh).await {
@@ -171,77 +130,22 @@ pub async fn run_blocks(
                 };
                 if let Some(tx) = tx_opt {
                     let input = tx.input().as_ref();
-                    if input.len() >= 4 {
-                        let sel_hex = format!("0x{}", hex::encode(&input[0..4]));
-                        let (fname, args) = if let Some((f, a)) =
-                            abi::try_decode_function(&sel_hex, input, &funcs)
-                        {
-                            (Some(f), a)
-                        } else {
-                            (None, vec![])
-                        };
-                        throttle::acquire().await;
-                        let receipt = provider.get_transaction_receipt(txh).await.ok().flatten();
-                        let (
-                            status,
-                            gas_used,
-                            cumulative_gas_used,
-                            effective_gas_price,
-                            block_number,
-                            tx_index,
-                            contract_address,
-                            receipt_logs,
-                        ) = if let Some(r) = &receipt {
-                            let logs_vec = Some(
-                                r.inner
-                                    .logs()
-                                    .iter()
-                                    .map(|l| crate::actions::SimpleLog {
-                                        address: l.address(),
-                                        topics: l.topics().to_vec(),
-                                        data: l.data().data.as_ref().to_vec(),
-                                        log_index: l.log_index,
-                                        removed: None,
-                                    })
-                                    .collect(),
-                            );
-                            (
-                                Some(if r.status() { 1 } else { 0 }),
-                                Some(r.gas_used as u64),
-                                Some(r.inner.cumulative_gas_used() as u64),
-                                Some(alloy_primitives::U256::from(r.effective_gas_price)),
-                                r.block_number,
-                                r.transaction_index,
-                                r.contract_address,
-                                logs_vec,
-                            )
-                        } else {
-                            (None, None, None, None, None, None, None, None)
-                        };
-                        let tr = TxRecord {
-                            hash: txh,
-                            from: Some(tx.from),
-                            to: match tx.kind() {
-                                alloy_primitives::TxKind::Call(a) => Some(a),
-                                _ => None,
-                            },
-                            input_selector: input[0..4].try_into().ok(),
-                            func_name: fname,
-                            func_args: args,
-                            gas: Some(tx.gas_limit()),
-                            gas_price: tx.gas_price().map(alloy_primitives::U256::from),
-                            effective_gas_price,
-                            status,
-                            gas_used,
-                            cumulative_gas_used,
-                            block_number,
-                            tx_index,
-                            contract_address,
-                            receipt_logs,
-                        };
-                        if let Some(a) = &actions {
-                            a.on_tx(&tr);
-                        }
+                    let (fname, args, input_selector) = public::decode_transaction_function(input, &funcs);
+                    throttle::acquire().await;
+                    let receipt = provider.get_transaction_receipt(txh).await.ok().flatten();
+                    
+                    // 使用公共函数创建 TxRecord
+                    let tr = public::create_tx_record_from_standard_tx(
+                        &tx, 
+                        txh, 
+                        &receipt, 
+                        fname, 
+                        args, 
+                        input_selector
+                    );
+                    
+                    if let Some(a) = &actions {
+                        a.on_tx(&tr);
                     }
                 }
             }

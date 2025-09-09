@@ -53,6 +53,17 @@ pub struct BlockRecord {
     pub number: u64,
 }
 
+#[derive(Debug, Clone)]
+pub struct ContractCreationRecord {
+    pub tx_hash: B256,
+    pub contract_address: Address,
+    pub deployer: Address,
+    pub block_number: u64,
+    pub tx_index: u64,
+    pub gas_used: Option<u64>,
+    pub constructor_args: Option<Vec<u8>>,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TxLite {
     pub hash: alloy_primitives::B256,
@@ -68,6 +79,9 @@ pub trait Action: Send + Sync {
         Ok(())
     }
     fn on_block(&self, _b: &BlockRecord) -> Result<()> {
+        Ok(())
+    }
+    fn on_contract_creation(&self, _c: &ContractCreationRecord) -> Result<()> {
         Ok(())
     }
 }
@@ -96,6 +110,11 @@ impl ActionSet {
     pub fn on_block(&self, b: &BlockRecord) {
         for a in &self.list {
             let _ = a.on_block(b);
+        }
+    }
+    pub fn on_contract_creation(&self, c: &ContractCreationRecord) {
+        for a in &self.list {
+            let _ = a.on_contract_creation(c);
         }
     }
 }

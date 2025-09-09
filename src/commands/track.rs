@@ -38,7 +38,11 @@ async fn run_realtime(cli: &crate::cli::Cli, rt: &RealtimeCmd, common: &CommonFl
     let provider = provider::connect_auto(&cfg.rpcurl).await?;
     let addrs = config::collect_enabled_addresses(&cfg)?;
     let set = Arc::new(app::build_actionset(&provider, &cfg, &cli));
-    if rt.blocks {
+    if rt.deployments {
+        runtime::realtime::run_contract_deployments(provider, Some(set))
+            .await
+            .map_err(|e| AppError::General(e.to_string()))
+    } else if rt.blocks {
         if rt.pending_blocks {
             return runtime::realtime::run_pending_transactions(
                 provider,
