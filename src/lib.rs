@@ -11,4 +11,6 @@ pub mod provider;
 pub mod runtime;
 pub mod throttle;
 pub mod source;
+pub mod registry;
+pub mod factories;
 pub use crate::actions::history_tx_scan;

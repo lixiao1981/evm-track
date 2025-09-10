@@ -46,8 +46,7 @@ async fn main() -> Result<()> {
             let cfg_path = cmd.config.as_ref().ok_or_else(|| {
                 AppError::Config("--config is required for history-tx-scan".to_string())
             })?;
-            let cfg =
-                config::load_config(cfg_path).map_err(|e| AppError::Config(e.to_string()))?;
+            let cfg = config::load_and_validate_config(cfg_path)?;
             let provider = Arc::new(provider::connect_auto(&cfg.rpcurl).await?);
             history_tx_scan::run(provider, cmd).await
         }

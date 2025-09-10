@@ -4,6 +4,8 @@ use crate::{
     actions::{self, ActionSet},
     cli::Cli,
     config::{ActionConfig, Config},
+    registry::build_actionset_dynamic,
+    factories::create_default_registry,
 };
 use alloy_provider::RootProvider;
 use alloy_transport::BoxTransport;
@@ -178,4 +180,11 @@ pub fn build_actionset(provider: &RootProvider<BoxTransport>, cfg: &Config, cli:
     add_common_actions(&mut set, prov_arc.clone(), cli, cfg);
     try_add_initscan(&mut set, prov_arc.clone(), cli, cfg);
     set
+}
+
+/// 新的动态Action构建函数
+/// 使用动态注册机制构建ActionSet，支持依赖解析和配置驱动
+pub fn build_actionset_v2(provider: &RootProvider<BoxTransport>, cfg: &Config, cli: &Cli) -> crate::error::Result<ActionSet> {
+    let registry = create_default_registry();
+    build_actionset_dynamic(&registry, provider, cfg, cli)
 }

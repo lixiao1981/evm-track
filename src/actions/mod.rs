@@ -97,6 +97,12 @@ impl ActionSet {
     pub fn add<A: Action + 'static>(&mut self, a: A) {
         self.list.push(Box::new(a));
     }
+    pub fn add_boxed(&mut self, a: Box<dyn Action>) {
+        self.list.push(a);
+    }
+    pub fn len(&self) -> usize {
+        self.list.len()
+    }
     pub fn on_event(&self, e: &EventRecord) {
         for a in &self.list {
             let _ = a.on_event(e);

@@ -15,7 +15,7 @@ pub async fn run(cli: &cli::Cli, cmd: &cli::InitScanCmd) -> Result<()> {
     if cli.verbose {
         println!("[DEBUG] Loading config from: {}", cfg_path.display());
     }
-    let cfg = config::load_config(cfg_path)?;
+    let cfg = config::load_and_validate_config(cfg_path)?;
     if cli.verbose {
         println!("[DEBUG] Config loaded successfully");
         println!("[DEBUG] RPC URL: {}", cfg.rpcurl);

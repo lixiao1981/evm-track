@@ -99,58 +99,54 @@ pub async fn run_blocks(
         }
         return Ok(());
     }
+    // 批量处理模式：按批次收集日志
+    const BATCH_SIZE: u64 = 10; // 每批处理10个区块
+    
     let mut num = from;
     while num <= to {
+        let batch_end = (num + BATCH_SIZE - 1).min(to);
+        
+        // 批量通知区块处理
         if let Some(a) = &actions {
-            a.on_block(&BlockRecord { number: num });
+            for block_num in num..=batch_end {
+                a.on_block(&BlockRecord { number: block_num });
+            }
         }
+        
+        // 批量获取这一批区块的所有日志
         let filter = Filter::new()
             .address(addrs.clone())
             .from_block(num)
-            .to_block(num);
+            .to_block(batch_end);
+            
         throttle::acquire().await;
         let logs = match provider.get_logs(&filter).await {
             Ok(v) => v,
             Err(e) => {
-                warn!("get_logs error at block {}: {}; skipping", num, e);
-                num = num.saturating_add(1);
+                warn!("get_logs error for blocks {}-{}: {}; skipping batch", num, batch_end, e);
+                num = batch_end + 1;
                 continue;
             }
         };
-        for v in logs {
-            let _er = public::process_log(&v, &events, &actions);
-            if let Some(txh) = v.transaction_hash {
-                throttle::acquire().await;
-                let tx_opt = match provider.get_transaction_by_hash(txh).await {
-                    Ok(v) => v,
-                    Err(e) => {
-                        warn!("get_transaction_by_hash {:?} error: {}; skipping tx", txh, e);
-                        None
-                    }
-                };
-                if let Some(tx) = tx_opt {
-                    let input = tx.input().as_ref();
-                    let (fname, args, input_selector) = public::decode_transaction_function(input, &funcs);
-                    throttle::acquire().await;
-                    let receipt = provider.get_transaction_receipt(txh).await.ok().flatten();
-                    
-                    // 使用公共函数创建 TxRecord
-                    let tr = public::create_tx_record_from_standard_tx(
-                        &tx, 
-                        txh, 
-                        &receipt, 
-                        fname, 
-                        args, 
-                        input_selector
-                    );
-                    
-                    if let Some(a) = &actions {
-                        a.on_tx(&tr);
-                    }
-                }
+        
+        println!("Processing {} logs from blocks {}-{}", logs.len(), num, batch_end);
+        
+        // 选择批量处理方式
+        let use_smart_grouping = logs.len() > 50; // 如果日志太多，使用智能分组
+        
+        if use_smart_grouping {
+            println!("Using smart block-grouped processing for {} logs", logs.len());
+            if let Err(e) = public::process_logs_by_blocks(logs, &provider, &events, &funcs, &actions).await {
+                warn!("Smart batch processing error for blocks {}-{}: {}", num, batch_end, e);
+            }
+        } else {
+            println!("Using simple batch processing for {} logs", logs.len());
+            if let Err(e) = public::process_logs_batch(logs, &provider, &events, &funcs, &actions).await {
+                warn!("Batch processing error for blocks {}-{}: {}", num, batch_end, e);
             }
         }
-        num = num.saturating_add(1);
+        
+        num = batch_end + 1;
     }
     Ok(())
 }

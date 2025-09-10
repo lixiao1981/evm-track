@@ -1,0 +1,48 @@
+{
+  "rpcurl": "https://rpc.ankr.com/eth",
+  "max-requests-per-second": 10,
+  "event_sigs_path": "./data/event_sigs.json",
+  "func_sigs_path": "./data/func_sigs.json",
+  "actions": {
+    "transfer": {
+      "enabled": true,
+      "addresses": {
+        "0xA0b86a33E6418de4bE4C96D4c3c1EbcDFf0aA78E": {},
+        "0xdAC17F958D2ee523a2206206994597C13D831ec7": {}
+      },
+      "options": {
+        "min_amount": "1000000000000000000"
+      }
+    },
+    "large_transfer": {
+      "enabled": true,
+      "addresses": {},
+      "options": {
+        "threshold": "1000000000000000000000"
+      }
+    },
+    "ownership": {
+      "enabled": false,
+      "addresses": {
+        "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984": {}
+      },
+      "options": {}
+    },
+    "deployment": {
+      "enabled": true,
+      "addresses": {},
+      "options": {}
+    },
+    "Logging": {
+      "enabled": true,
+      "addresses": {},
+      "options": {
+        "log-events": true,
+        "log-transactions": true,
+        "log-blocks": false,
+        "enable-terminal-logs": true,
+        "enable-discord-logs": false
+      }
+    }
+  }
+}

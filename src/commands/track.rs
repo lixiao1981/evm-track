@@ -21,7 +21,7 @@ async fn run_realtime(cli: &crate::cli::Cli, rt: &RealtimeCmd, common: &CommonFl
     let cfg_path = rt.config.as_ref().or(common.config.as_ref()).ok_or_else(|| {
         AppError::Config("--config is required (provide at track or subcommand)".to_string())
     })?;
-    let cfg = config::load_config(cfg_path)?;
+    let cfg = config::load_and_validate_config(cfg_path)?;
     crate::throttle::init(cfg.max_requests_per_second);
     if let Some(p) = &cli.event_sigs {
         abi::set_event_sigs_path(p.display().to_string());
@@ -82,7 +82,7 @@ async fn run_historical(
     if let Some(p) = &cli.func_sigs {
         abi::set_func_sigs_path(p.display().to_string());
     }
-    let cfg = config::load_config(base_cfg_path)?;
+    let cfg = config::load_and_validate_config(base_cfg_path)?;
     if let Some(p) = &cfg.event_sigs_path {
         abi::set_event_sigs_path(p.clone());
     }
@@ -93,7 +93,7 @@ async fn run_historical(
         HistoricalWhichCmd::Events(ref range) => {
             let mut cfg2 = cfg;
             if let Some(ref p) = range.config {
-                cfg2 = config::load_config(p)?;
+                cfg2 = config::load_and_validate_config(p)?;
                 if let Some(ep) = &cfg2.event_sigs_path {
                     abi::set_event_sigs_path(ep.clone());
                 }
@@ -113,7 +113,7 @@ async fn run_historical(
         HistoricalWhichCmd::Blocks(ref range) => {
             let mut cfg2 = cfg;
             if let Some(ref p) = range.config {
-                cfg2 = config::load_config(p)?;
+                cfg2 = config::load_and_validate_config(p)?;
                 if let Some(ep) = &cfg2.event_sigs_path {
                     abi::set_event_sigs_path(ep.clone());
                 }
