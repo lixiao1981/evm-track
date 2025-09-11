@@ -15,6 +15,7 @@ impl ActionFactory for TransferActionFactory {
         _config: &ActionConfig,
         provider: Arc<RootProvider<BoxTransport>>,
         _cli: &crate::cli::Cli,
+        _output_manager: Option<crate::output::GlobalOutputManager>,
     ) -> Result<Box<dyn Action>> {
         Ok(Box::new(TransferAction::new(provider)))
     }

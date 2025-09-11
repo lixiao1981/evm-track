@@ -1,4 +1,5 @@
 use crate::error::{AppError, Result};
+use crate::output::OutputConfig;
 use alloy_primitives::Address;
 use serde::Deserialize;
 use std::{collections::HashMap, path::{Path, PathBuf}, str::FromStr, fs};
@@ -10,14 +11,27 @@ pub struct Config {
     #[serde(default)]
     pub actions: HashMap<String, ActionConfig>,
     #[serde(default)]
-    pub l2: bool,
-    #[serde(default)]
     pub event_sigs_path: Option<String>,
     #[serde(default)]
     pub func_sigs_path: Option<String>,
     #[serde(rename = "max-requests-per-second")]
     #[serde(default)]
     pub max_requests_per_second: u32,
+    #[serde(default)]
+    pub output: Option<OutputConfig>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            rpcurl: "http://localhost:8545".to_string(),
+            actions: HashMap::new(),
+            event_sigs_path: None,
+            func_sigs_path: None,
+            max_requests_per_second: 10,
+            output: None,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -28,6 +42,8 @@ pub struct ActionConfig {
     pub addresses: HashMap<String, serde_json::Value>,
     #[serde(default)]
     pub options: serde_json::Value,
+    #[serde(default)]
+    pub output: Option<OutputConfig>,
 }
 
 pub fn load_config(path: &PathBuf) -> Result<Config> {

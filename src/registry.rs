@@ -1,6 +1,7 @@
 use crate::actions::{Action, ActionSet};
 use crate::config::ActionConfig;
 use crate::error::{AppError, Result};
+use crate::output::{GlobalOutputManager, OutputConfig};
 use alloy_provider::RootProvider;
 use alloy_transport::BoxTransport;
 use std::collections::HashMap;
@@ -15,6 +16,7 @@ pub trait ActionFactory: Send + Sync {
         config: &ActionConfig,
         provider: Arc<RootProvider<BoxTransport>>,
         cli: &crate::cli::Cli,
+        output_manager: Option<GlobalOutputManager>,
     ) -> Result<Box<dyn Action>>;
     
     /// 获取Action的描述信息
@@ -64,10 +66,11 @@ impl ActionRegistry {
         config: &ActionConfig,
         provider: Arc<RootProvider<BoxTransport>>,
         cli: &crate::cli::Cli,
+        output_manager: Option<GlobalOutputManager>,
     ) -> Result<Box<dyn Action>> {
         if let Some(factory) = self.factories.get(name) {
             debug!("Creating action instance: {}", name);
-            factory.create_action(config, provider, cli)
+            factory.create_action(config, provider, cli, output_manager)
         } else {
             Err(AppError::Config(format!("Unknown action: {}", name)))
         }
@@ -91,6 +94,28 @@ impl ActionRegistry {
     /// 获取Action的配置示例
     pub fn get_config_example(&self, name: &str) -> Option<serde_json::Value> {
         self.factories.get(name).map(|f| f.config_example())
+    }
+    
+    /// 获取Action工厂引用
+    pub fn get_factory(&self, name: &str) -> Option<&Box<dyn ActionFactory>> {
+        self.factories.get(name)
+    }
+    
+    /// 获取所有注册的Action工厂名称
+    pub fn get_factory_names(&self) -> Vec<String> {
+        self.factories.keys().cloned().collect()
+    }
+    
+    /// 注册所有内置Action工厂
+    pub fn register_all_factories(&mut self) {
+        use crate::factories::*;
+        
+        self.register("logging", logging::LoggingActionFactory);
+        self.register("transfer", transfer::TransferActionFactory);
+        self.register("large_transfer", large_transfer::LargeTransferActionFactory);
+        self.register("deployment", deployment::DeploymentActionFactory);
+        self.register("selector_scan", selector_scan::SelectorScanActionFactory);
+        self.register("tornado", selector_scan::TornadoActionFactory);
     }
     
     /// 检查Action是否已注册
@@ -152,11 +177,12 @@ impl ActionRegistry {
 }
 
 /// 构建ActionSet的主要函数
-pub fn build_actionset_dynamic(
+pub async fn build_actionset_dynamic(
     registry: &ActionRegistry,
     provider: &RootProvider<BoxTransport>,
     config: &crate::config::Config,
     cli: &crate::cli::Cli,
+    global_output_manager: Option<GlobalOutputManager>,
 ) -> Result<ActionSet> {
     let mut set = ActionSet::new();
     let provider_arc = Arc::new(provider.clone());
@@ -193,7 +219,14 @@ pub fn build_actionset_dynamic(
         }
         
         if let Some(action_config) = config.actions.get(&action_name) {
-            match registry.create_action(&action_name, action_config, provider_arc.clone(), cli) {
+            // 为每个Action创建独立的输出管理器（如果配置了）
+            let action_output_manager = if let Some(action_output_config) = &action_config.output {
+                Some(GlobalOutputManager::new(action_output_config.clone()).await.map_err(|e| AppError::General(e.to_string()))?)
+            } else {
+                global_output_manager.clone()
+            };
+
+            match registry.create_action(&action_name, action_config, provider_arc.clone(), cli, action_output_manager) {
                 Ok(action) => {
                     info!("✅ Loaded action: {}", action_name);
                     set.add_boxed(action);
@@ -210,7 +243,7 @@ pub fn build_actionset_dynamic(
     if cli.json {
         if registry.is_registered("JsonLog") {
             let dummy_config = crate::config::ActionConfig::default();
-            match registry.create_action("JsonLog", &dummy_config, provider_arc.clone(), cli) {
+            match registry.create_action("JsonLog", &dummy_config, provider_arc.clone(), cli, global_output_manager.clone()) {
                 Ok(action) => {
                     info!("✅ Loaded CLI action: JsonLog");
                     set.add_boxed(action);

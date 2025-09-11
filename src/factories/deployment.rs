@@ -15,6 +15,7 @@ impl ActionFactory for DeploymentActionFactory {
         config: &ActionConfig,
         provider: Arc<RootProvider<BoxTransport>>,
         _cli: &crate::cli::Cli,
+        _output_manager: Option<crate::output::GlobalOutputManager>,
     ) -> Result<Box<dyn Action>> {
         let options = &config.options;
         
@@ -55,6 +56,7 @@ impl ActionFactory for OwnershipActionFactory {
         _config: &ActionConfig,
         _provider: Arc<RootProvider<BoxTransport>>,
         _cli: &crate::cli::Cli,
+        _output_manager: Option<crate::output::GlobalOutputManager>,
     ) -> Result<Box<dyn Action>> {
         Ok(Box::new(crate::actions::ownership::OwnershipAction))
     }
@@ -87,6 +89,7 @@ impl ActionFactory for ProxyUpgradeActionFactory {
         _config: &ActionConfig,
         provider: Arc<RootProvider<BoxTransport>>,
         _cli: &crate::cli::Cli,
+        _output_manager: Option<crate::output::GlobalOutputManager>,
     ) -> Result<Box<dyn Action>> {
         Ok(Box::new(crate::actions::proxy::ProxyUpgradeAction::new(provider)))
     }

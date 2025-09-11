@@ -13,4 +13,5 @@ pub mod throttle;
 pub mod source;
 pub mod registry;
 pub mod factories;
+pub mod output;
 pub use crate::actions::history_tx_scan;

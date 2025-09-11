@@ -15,6 +15,7 @@ impl ActionFactory for LoggingActionFactory {
         config: &ActionConfig,
         _provider: Arc<RootProvider<BoxTransport>>,
         cli: &crate::cli::Cli,
+        _output_manager: Option<crate::output::GlobalOutputManager>,
     ) -> Result<Box<dyn Action>> {
         let options = &config.options;
         
@@ -84,6 +85,7 @@ impl ActionFactory for JsonLogActionFactory {
         _config: &ActionConfig,
         _provider: Arc<RootProvider<BoxTransport>>,
         _cli: &crate::cli::Cli,
+        _output_manager: Option<crate::output::GlobalOutputManager>,
     ) -> Result<Box<dyn Action>> {
         Ok(Box::new(crate::actions::jsonlog::JsonLogAction))
     }

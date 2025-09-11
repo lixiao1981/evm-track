@@ -184,7 +184,15 @@ pub fn build_actionset(provider: &RootProvider<BoxTransport>, cfg: &Config, cli:
 
 /// 新的动态Action构建函数
 /// 使用动态注册机制构建ActionSet，支持依赖解析和配置驱动
-pub fn build_actionset_v2(provider: &RootProvider<BoxTransport>, cfg: &Config, cli: &Cli) -> crate::error::Result<ActionSet> {
+pub async fn build_actionset_v2(provider: &RootProvider<BoxTransport>, cfg: &Config, cli: &Cli) -> crate::error::Result<ActionSet> {
     let registry = create_default_registry();
-    build_actionset_dynamic(&registry, provider, cfg, cli)
+    
+    // 创建全局输出管理器（如果配置了）
+    let global_output_manager = if let Some(output_config) = &cfg.output {
+        Some(crate::output::GlobalOutputManager::new(output_config.clone()).await.map_err(|e| crate::error::AppError::General(e.to_string()))?)
+    } else {
+        None
+    };
+    
+    build_actionset_dynamic(&registry, provider, cfg, cli, global_output_manager).await
 }
