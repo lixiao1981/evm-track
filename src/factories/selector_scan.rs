@@ -76,6 +76,7 @@ impl ActionFactory for TornadoActionFactory {
             
         let opts = TornadoOptions {
             output_filepath,
+            verbose: false, // 在工厂模式中默认不开启verbose
         };
         
         Ok(Box::new(TornadoAction::new(opts)))

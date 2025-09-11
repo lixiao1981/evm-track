@@ -1,0 +1,22 @@
+{
+  "rpcurl": "wss://api.zan.top/node/ws/v1/bsc/mainnet/f18c4eee92c34af6a03d287a48d3fdf7/",
+  "actions": {
+    "Logging": {
+      "enabled": true,
+      "options": {
+        "log-events": true,
+        "log-transactions": false,
+        "log-blocks": false
+      }
+    },
+    "TornadoCash": {
+      "enabled": true,
+      "addresses": {
+        "0x330bdFADE01eE9bF63C209Ee33102DD334618e0a": {}
+      },
+      "options": {
+        "output-filepath": "./tornado_events.json"
+      }
+    }
+  }
+}

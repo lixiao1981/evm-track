@@ -85,13 +85,13 @@ fn add_common_actions(set: &mut ActionSet, prov_arc: Arc<RootProvider<BoxTranspo
     set.add(actions::deployment::DeploymentScanAction::new(prov_arc.clone(), dep_opts));
 
     // LargeTransfer optional
-    if let Some(ac) = cfg.actions.get("LargeTransfer") {
+    if let Some(ac) = cfg.actions.get("large_transfer") {
         let min_h = ac
             .options
             .get("min-amount")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
-            .or_else(|| ac.options.get("min_amount").and_then(|v| v.as_str()).map(|s| s.to_string()));
+            .or_else(|| ac.options.get("threshold").and_then(|v| v.as_str()).map(|s| s.to_string()));
         let dec_default = ac
             .options
             .get("decimals-default")
@@ -99,21 +99,22 @@ fn add_common_actions(set: &mut ActionSet, prov_arc: Arc<RootProvider<BoxTranspo
             .map(|v| v as u8)
             .unwrap_or(18);
         set.add(actions::large_transfer::LargeTransferAction::new(
-            actions::large_transfer::LargeTransferOptions { min_amount_human: min_h, decimals_default: dec_default },
+            actions::large_transfer::LargeTransferOptions { min_amount_human: min_h, decimals_default: dec_default, verbose: false },
+            cli.verbose,
         ));
     }
 
-    // Tornado optional
-    if let Some(path) = cfg
-        .actions
-        .get("TornadoCash")
-        .and_then(|ac| ac.options.get("output-filepath"))
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-    {
-        set.add(actions::tornado::TornadoAction::new(actions::tornado::TornadoOptions { output_filepath: Some(path) }));
-    } else {
-        set.add(actions::tornado::TornadoAction::new(actions::tornado::TornadoOptions { output_filepath: None }));
+    // Tornado optional - only add if explicitly configured
+    if let Some(ac) = cfg.actions.get("TornadoCash") {
+        if ac.enabled {
+            let output_path = ac.options.get("output-filepath")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            set.add(actions::tornado::TornadoAction::new(actions::tornado::TornadoOptions { 
+                output_filepath: output_path,
+                verbose: cli.verbose
+            }));
+        }
     }
 }
 

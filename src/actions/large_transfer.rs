@@ -1,11 +1,18 @@
 use super::{Action, EventRecord};
 use crate::error::Result;
 use alloy_primitives::{Address, U256};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LargeTransferOptions {
+    #[serde(rename = "threshold")]
     pub min_amount_human: Option<String>,
+    
+    #[serde(rename = "decimals-default")]
     pub decimals_default: u8,
+    
+    #[serde(skip)]
+    pub verbose: bool,
 }
 
 pub struct LargeTransferAction {
@@ -13,7 +20,9 @@ pub struct LargeTransferAction {
 }
 
 impl LargeTransferAction {
-    pub fn new(opts: LargeTransferOptions) -> Self {
+    pub fn new(opts: LargeTransferOptions, verbose: bool) -> Self {
+        let mut opts = opts;
+        opts.verbose = verbose;
         Self { opts }
     }
     
@@ -94,10 +103,21 @@ fn parse_human_to_u256(s: &str, decimals: u8) -> Option<U256> {
 
 impl Action for LargeTransferAction {
     fn on_event(&self, record: &EventRecord) -> Result<()> {        
+        if self.opts.verbose {
+            println!("DEBUG: LargeTransferAction received event at {:?}, topics length: {}", 
+                record.address, record.topics.len());
+            if !record.topics.is_empty() {
+                println!("DEBUG: First topic: {}", record.topics[0]);
+            }
+        }
+        
         // 检查是否为 Transfer 事件
         if record.topics.len() >= 3 {
             let transfer_sig = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
             let actual_topic = record.topics[0].to_string();
+            if self.opts.verbose {
+                println!("DEBUG: Comparing topics - actual: {}, expected: {}", actual_topic, transfer_sig);
+            }
             if actual_topic == transfer_sig {
                 
                 // 从字段中提取 Transfer 金额 (value 是第三个字段，索引为2)
@@ -116,11 +136,21 @@ impl Action for LargeTransferAction {
                 // 如果设置了最小金额阈值，检查是否超过阈值
                 if let Some(min_amount_str) = &self.opts.min_amount_human {
                     if let Some(min_amount) = parse_human_to_u256(min_amount_str, decimals) {
+                        if self.opts.verbose {
+                            println!("DEBUG: Transfer amount: {}, threshold: {}, decimals: {}", amount, min_amount, decimals);
+                        }
                         if amount < min_amount {
                             return Ok(());
                         }
                     } else {
+                        if self.opts.verbose {
+                            println!("DEBUG: Failed to parse threshold: {}", min_amount_str);
+                        }
                         return Ok(());
+                    }
+                } else {
+                    if self.opts.verbose {
+                        println!("DEBUG: No threshold configured");
                     }
                 }
 
@@ -129,10 +159,12 @@ impl Action for LargeTransferAction {
                 if let Some(anomaly_threshold) = parse_human_to_u256("10000000000000", decimals) { // 10,000,000,000,000
                     if amount > anomaly_threshold {
                         let formatted_amount = self.format_amount(amount, decimals);
-                        println!("ANOMALY Large Transfer (ignored): {} tokens at {:?} (decimals: {})", 
-                            formatted_amount, record.address, decimals);
-                        println!("  Block: {}, Tx: {:?}", 
-                            record.block_number.unwrap_or(0), record.tx_hash);
+                        if self.opts.verbose {
+                            println!("ANOMALY Large Transfer (ignored): {} tokens at {:?} (decimals: {})", 
+                                formatted_amount, record.address, decimals);
+                            println!("  Block: {}, Tx: {:?}", 
+                                record.block_number.unwrap_or(0), record.tx_hash);
+                        }
                         return Ok(());
                     }
                 }
@@ -140,10 +172,12 @@ impl Action for LargeTransferAction {
                 // 格式化金额显示
                 let formatted_amount = self.format_amount(amount, decimals);
                 
-                println!("Large Transfer: {} tokens at {:?} (decimals: {})", 
-                    formatted_amount, record.address, decimals);
-                println!("  Block: {}, Tx: {:?}", 
-                    record.block_number.unwrap_or(0), record.tx_hash);
+                if self.opts.verbose {
+                    println!("Large Transfer: {} tokens at {:?} (decimals: {})", 
+                        formatted_amount, record.address, decimals);
+                    println!("  Block: {}, Tx: {:?}", 
+                        record.block_number.unwrap_or(0), record.tx_hash);
+                }
             }
         }
         Ok(())

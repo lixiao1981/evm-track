@@ -14,7 +14,7 @@ impl ActionFactory for LargeTransferActionFactory {
         &self,
         config: &ActionConfig,
         _provider: Arc<RootProvider<BoxTransport>>,
-        _cli: &crate::cli::Cli,
+        cli: &crate::cli::Cli,
         _output_manager: Option<crate::output::GlobalOutputManager>,
     ) -> Result<Box<dyn Action>> {
         let options = &config.options;
@@ -36,9 +36,10 @@ impl ActionFactory for LargeTransferActionFactory {
         let opts = LargeTransferOptions {
             min_amount_human,
             decimals_default,
+            verbose: false,
         };
 
-        Ok(Box::new(LargeTransferAction::new(opts)))
+        Ok(Box::new(LargeTransferAction::new(opts, cli.verbose)))
     }
 
     fn description(&self) -> &str {

@@ -1,13 +1,14 @@
 {
   "rpcurl": "wss://api.zan.top/node/ws/v1/bsc/mainnet/f18c4eee92c34af6a03d287a48d3fdf7/",
   "actions": {
+ 
     "large_transfer": {
       "enabled": true,
       "addresses": {
-        "0x742d35Cc6634C0532925a3b8D1428c5f6b6e0138": {}
+        "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c": {}
       },
       "options": {
-        "threshold": "1000000000000000000000",
+        "threshold": "1000000",
         "decimals-default": 18
       },
       "output": {
@@ -20,11 +21,11 @@
       }
     },
     "Logging": {
-      "enabled": true,
+      "enabled": false,
       "addresses": {},
       "options": {
-        "log_events": true,
-        "log_transactions": true
+        "log_events": false,
+        "log_transactions": false
       },
       "output": {
         "format": "jsonlines",

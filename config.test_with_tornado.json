@@ -1,0 +1,27 @@
+{
+  "rpcurl": "wss://api.zan.top/node/ws/v1/bsc/mainnet/f18c4eee92c34af6a03d287a48d3fdf7/",
+  "max-requests-per-second": 10,
+  "actions": {
+    "large_transfer": {
+      "enabled": true,
+      "addresses": {
+        "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c": "WBNB"
+      },
+      "options": {
+        "threshold": "10000"
+      }
+    },
+    "TornadoCash": {
+      "enabled": true,
+      "addresses": {},
+      "options": {
+        "output-filepath": "tornado_test.json"
+      }
+    },
+    "Logging": {
+      "enabled": true,
+      "addresses": {},
+      "options": {}
+    }
+  }
+}
