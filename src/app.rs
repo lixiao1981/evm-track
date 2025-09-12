@@ -99,7 +99,7 @@ fn add_common_actions(set: &mut ActionSet, prov_arc: Arc<RootProvider<BoxTranspo
             .map(|v| v as u8)
             .unwrap_or(18);
         set.add(actions::large_transfer::LargeTransferAction::new(
-            actions::large_transfer::LargeTransferOptions { min_amount_human: min_h, decimals_default: dec_default, verbose: false },
+            actions::large_transfer::LargeTransferOptions { min_amount_human: min_h, decimals_default: dec_default, verbose: cli.verbose },
             cli.verbose,
         ));
     }

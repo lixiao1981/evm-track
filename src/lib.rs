@@ -5,6 +5,7 @@ pub mod app;
 pub mod cli;
 pub mod commands;
 pub mod config;
+pub mod context;
 pub mod data_cmd;
 pub mod db;
 pub mod provider;

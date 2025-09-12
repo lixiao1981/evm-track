@@ -1,49 +1,36 @@
-use crate::{abi, actions, cli, config, error::{AppError, Result}, provider};
+use crate::{abi, actions, cli, config, context::RuntimeContext, error::{AppError, Result}, provider};
 use std::sync::Arc;
 
 pub async fn run(cli: &cli::Cli, cmd: &cli::InitScanCmd) -> Result<()> {
-    if cli.verbose {
-        println!("[DEBUG] Starting init-scan command");
-        println!("[DEBUG] CLI verbose: {}", cli.verbose);
-    }
-    
     let cfg_path = cmd
         .config
         .as_ref()
         .ok_or_else(|| AppError::Config("--config is required for initscan".to_string()))?;
     
-    if cli.verbose {
-        println!("[DEBUG] Loading config from: {}", cfg_path.display());
-    }
     let cfg = config::load_and_validate_config(cfg_path)?;
-    if cli.verbose {
-        println!("[DEBUG] Config loaded successfully");
-        println!("[DEBUG] RPC URL: {}", cfg.rpcurl);
-        println!("[DEBUG] Max requests per second: {:?}", cfg.max_requests_per_second);
-    }
+    let ctx = RuntimeContext::new(cli, cfg.clone())?;
+    let init_ctx = ctx.create_sub_context("initscan");
     
+    init_ctx.verbose_log("🔍 Starting init-scan command...");
+    init_ctx.debug_log(&format!("Config loaded from: {}", cfg_path.display()));
+    init_ctx.debug_log(&format!("RPC URL: {}", cfg.rpcurl));
+    init_ctx.debug_log(&format!("Max requests per second: {}", cfg.max_requests_per_second));
+    
+    // 配置ABI路径，使用上下文记录
     if let Some(p) = &cli.event_sigs {
-        if cli.verbose {
-            println!("[DEBUG] Setting event sigs path from CLI: {}", p.display());
-        }
+        init_ctx.debug_log(&format!("Setting event sigs path from CLI: {}", p.display()));
         abi::set_event_sigs_path(p.display().to_string());
     }
     if let Some(p) = &cli.func_sigs {
-        if cli.verbose {
-            println!("[DEBUG] Setting func sigs path from CLI: {}", p.display());
-        }
+        init_ctx.debug_log(&format!("Setting func sigs path from CLI: {}", p.display()));
         abi::set_func_sigs_path(p.display().to_string());
     }
     if let Some(p) = &cfg.event_sigs_path {
-        if cli.verbose {
-            println!("[DEBUG] Setting event sigs path from config: {}", p);
-        }
+        init_ctx.debug_log(&format!("Setting event sigs path from config: {}", p));
         abi::set_event_sigs_path(p.clone());
     }
     if let Some(p) = &cfg.func_sigs_path {
-        if cli.verbose {
-            println!("[DEBUG] Setting func sigs path from config: {}", p);
-        }
+        init_ctx.debug_log(&format!("Setting func sigs path from config: {}", p));
         abi::set_func_sigs_path(p.clone());
     }
     

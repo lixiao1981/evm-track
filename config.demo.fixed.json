@@ -1,0 +1,47 @@
+{
+  "rpcurl": "wss://api.zan.top/node/ws/v1/bsc/mainnet/f18c4eee92c34af6a03d287a48d3fdf7/",
+  "max-requests-per-second": 0,
+  "actions": {
+    "Logging": {
+      "enabled": true,
+      "addresses": {},
+      "options": {
+        "enable-terminal-logs": true,
+        "enable-discord-logs": false,
+        "log-events": true,
+        "log-transactions": true,
+        "log-blocks": true
+      }
+    },
+    "Deployment": {
+      "enabled": true,
+      "addresses": {},
+      "options": {
+        "output-filepath": "./deployments.jsonl"
+      }
+    },
+    "Initscan": {
+      "enabled": true,
+      "addresses": {},
+      "options": {
+        "from-address": "0x4b20993bc481177ec7e8f571cecae8a9e22c02db",
+        "check-addresses": [
+          "0x4b20993bc481177ec7e8f571cecae8a9e22c02db",
+          "0xca35b7d915458ef540ade6068dfe2f44e8fa733c"
+        ],
+        "init-after-delay": 3,
+        "init-concurrency": 20,
+        "alert-usd-threshold": 0,
+        "function-signature-calldata": {
+          "initialize()": "0x8129fc1c",
+          "init()": "0xe1c7392a",
+          "init(address)": "0x19ab453c0000000000000000000000004b20993bc481177ec7e8f571cecae8a9e22c02db"
+        },
+        "webhook-url": "",
+        "initializable-contracts-filepath": "./data/eth_initializable_contracts.json",
+        "init-known-contracts-frequency": 86400,
+        "debug": true
+      }
+    }
+  }
+}

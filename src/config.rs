@@ -5,7 +5,7 @@ use serde::Deserialize;
 use std::{collections::HashMap, path::{Path, PathBuf}, str::FromStr, fs};
 use tracing::{warn, debug};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     pub rpcurl: String,
     #[serde(default)]
@@ -34,7 +34,7 @@ impl Default for Config {
     }
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct ActionConfig {
     #[serde(default)]
     pub enabled: bool,
